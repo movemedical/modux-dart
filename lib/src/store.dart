@@ -594,7 +594,7 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
   final Duration duration;
 
   StreamSubscription _sub;
-  Set<Subject<ModuxEvent<T>>> _subjects;
+//  Set<Subject<ModuxEvent<T>>> _subjects;
 
   StoreSubject._(
       this.owner,
@@ -748,7 +748,7 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
 
   void _error(dynamic e, [dynamic stackTrace]) {
     try {
-      _subjects?.forEach((s) => s.addError(e, stackTrace));
+//      _subjects?.forEach((s) => s.addError(e, stackTrace));
     } catch (e, stackTrace) {}
   }
 
@@ -757,7 +757,7 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
       handler?.call(event);
     } finally {
       try {
-        _subjects?.forEach((s) => s.add(event));
+//        _subjects?.forEach((s) => s.add(event));
       } finally {
         if (event.isTimeout) {
           close();
@@ -786,10 +786,10 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
   Future<dynamic> close() async {
     if (isClosed) return;
 
-    if (_subjects != null && _subjects.isNotEmpty)
-      List.of(_subjects, growable: false).forEach((s) => s.close());
-
-    _subjects.clear();
+//    if (_subjects != null && _subjects.isNotEmpty)
+//      List.of(_subjects, growable: false).forEach((s) => s.close());
+//
+//    _subjects?.clear();
 
     _sub?.cancel();
     _sub = null;
