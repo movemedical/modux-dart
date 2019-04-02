@@ -73,9 +73,13 @@ abstract class CommandDispatcher<REQ, RESP,
 
   void execute(Command<REQ> command) {
     final payload = payloadOf<Command<REQ>>(command);
-    if (!$ensureState($store)) {
-      throw StateError('Command state [${$name}] cannot be initialized. '
-          'Parent state [${$options.parent.name}] is null');
+    try {
+      if (!$ensureState($store)) {
+        throw StateError('Command state [${$name}] cannot be initialized. '
+            'Parent state [${$options.parent.name}] is null');
+      }
+    } catch (e) {
+      print(e);
     }
     $execute(payload);
   }
