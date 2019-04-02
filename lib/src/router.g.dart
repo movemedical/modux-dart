@@ -123,21 +123,36 @@ class _$RouteCommandSerializer implements StructuredSerializer<RouteCommand> {
       serializers.serialize(object.from, specifiedType: const FullType(String)),
       'to',
       serializers.serialize(object.to, specifiedType: const FullType(String)),
-      'action',
-      serializers.serialize(object.action,
-          specifiedType: const FullType(RouteCommandAction)),
-      'routeType',
-      serializers.serialize(object.routeType,
-          specifiedType: const FullType(RouteType)),
-      'replaceName',
-      serializers.serialize(object.replaceName,
-          specifiedType: const FullType(String)),
-      'state',
-      serializers.serialize(object.state, specifiedType: parameterT),
-      'inflating',
-      serializers.serialize(object.inflating,
-          specifiedType: const FullType(bool)),
     ];
+    if (object.action != null) {
+      result
+        ..add('action')
+        ..add(serializers.serialize(object.action,
+            specifiedType: const FullType(RouteCommandAction)));
+    }
+    if (object.routeType != null) {
+      result
+        ..add('routeType')
+        ..add(serializers.serialize(object.routeType,
+            specifiedType: const FullType(RouteType)));
+    }
+    if (object.replaceName != null) {
+      result
+        ..add('replaceName')
+        ..add(serializers.serialize(object.replaceName,
+            specifiedType: const FullType(String)));
+    }
+    if (object.state != null) {
+      result
+        ..add('state')
+        ..add(serializers.serialize(object.state, specifiedType: parameterT));
+    }
+    if (object.inflating != null) {
+      result
+        ..add('inflating')
+        ..add(serializers.serialize(object.inflating,
+            specifiedType: const FullType(bool)));
+    }
 
     return result;
   }
@@ -293,21 +308,6 @@ class _$RouteCommand<T> extends RouteCommand<T> {
     }
     if (to == null) {
       throw new BuiltValueNullFieldError('RouteCommand', 'to');
-    }
-    if (action == null) {
-      throw new BuiltValueNullFieldError('RouteCommand', 'action');
-    }
-    if (routeType == null) {
-      throw new BuiltValueNullFieldError('RouteCommand', 'routeType');
-    }
-    if (replaceName == null) {
-      throw new BuiltValueNullFieldError('RouteCommand', 'replaceName');
-    }
-    if (state == null) {
-      throw new BuiltValueNullFieldError('RouteCommand', 'state');
-    }
-    if (inflating == null) {
-      throw new BuiltValueNullFieldError('RouteCommand', 'inflating');
     }
     if (T == dynamic) {
       throw new BuiltValueMissingGenericsError('RouteCommand', 'T');

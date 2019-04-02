@@ -144,9 +144,9 @@ class ActiveRoute {
 
   ActiveRoute(this.platform, this.entry, this.future);
 
-  RouteType get routeType => future.routeType;
+  RouteType get routeType => future?.routeType;
 
-  RouteCommandAction get action => future.routeAction;
+  RouteCommandAction get action => future?.routeAction;
 }
 
 class RouterServiceMutator<T> {
@@ -280,7 +280,13 @@ class RouterService implements StoreService, RouterRegistry {
   void _push(dynamic route) {
     final index = indexOfPlatform(route);
     if (index != -1) return;
-    _s.add(route);
+    final r = _byPlatform.remove(route);
+
+    if (r == null) {
+      _s.add(ActiveRoute(route, null, null));
+    } else {
+      _s.add(r);
+    }
   }
 
   void _replace(dynamic oldRoute, dynamic newRoute) {
@@ -344,11 +350,6 @@ class RouterService implements StoreService, RouterRegistry {
       return;
     }
 
-    if (_byPlatform.containsKey(platform)) {
-      future.cancel('Platform [$platform] already exists');
-      return;
-    }
-
     switch (future.routeType) {
       case RouteType.page:
         break;
@@ -383,11 +384,10 @@ class RouterService implements StoreService, RouterRegistry {
         break;
 
       case RouteCommandAction.popAndPush:
+        if (_s.isNotEmpty) _plugin?.pop(_s.last, null);
+        _plugin?.push(route);
         break;
     }
-
-    // Create Platform Route.
-    _plugin?.push(route);
   }
 
   void _done(RouteFuture future, CommandResult<RouteResult> result) {
@@ -505,14 +505,19 @@ abstract class RouteCommand<T>
 
   String get to;
 
+  @nullable
   RouteCommandAction get action;
 
+  @nullable
   RouteType get routeType;
 
+  @nullable
   String get replaceName;
 
+  @nullable
   T get state;
 
+  @nullable
   bool get inflating;
 
   RouteCommand._();
