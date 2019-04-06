@@ -155,6 +155,30 @@ class ActiveRoute {
   RouteType get routeType => future?.routeType;
 
   RouteCommandAction get action => future?.routeAction;
+
+  void _activated() {
+    try {
+      entry?.toActions?.$activated();
+    } catch (e) {}
+  }
+
+  void _deactivated() {
+    try {
+      entry?.toActions?.$deactivated();
+    } catch (e) {}
+  }
+
+  void _pushing() {
+    try {
+      entry?.toActions?.$pushing();
+    } catch (e) {}
+  }
+
+  void _popping() {
+    try {
+      entry?.toActions?.$popping();
+    } catch (e) {}
+  }
 }
 
 /// Provides stack mutation for a RouterPlugin.
@@ -321,6 +345,7 @@ class RouterService implements StoreService, RouterRegistry {
     if (r == null) {
       _stack.add(ActiveRoute(route, null, null));
     } else {
+      r._pushing();
       _stack.add(r);
     }
   }
@@ -350,7 +375,7 @@ class RouterService implements StoreService, RouterRegistry {
     if (index == -1) return;
     if (index == _stack.length - 1) {
       _syncState();
-      _stack.removeLast();
+      _stack.removeLast()?._popping();
       return;
     }
 
@@ -414,6 +439,8 @@ class RouterService implements StoreService, RouterRegistry {
     final route = ActiveRoute(platform, future.entry, future);
     _byPlatform[platform] = route;
 
+    route._pushing();
+
     switch (future.routeAction) {
       case RouteCommandAction.push:
         _plugin?.push(route);
@@ -446,6 +473,8 @@ class RouterService implements StoreService, RouterRegistry {
       final index = _stack.indexOf(future.active);
       if (index < 0) return;
 
+      _stack[index]?._popping();
+
       // Sync.
       _plugin?.pop(future.active, result);
     } finally {
@@ -473,13 +502,13 @@ abstract class RouteActions<
 
   RouteType get $routeType => RouteType.page;
 
-  ActionDispatcher<dynamic> get $activatedAction;
+  ActionDispatcher<Null> get $activated;
 
-  ActionDispatcher<dynamic> get $deactivatedAction;
+  ActionDispatcher<Null> get $deactivated;
 
-  ActionDispatcher<dynamic> get $pushAction;
+  ActionDispatcher<State> get $pushing;
 
-  ActionDispatcher<dynamic> get $popAction;
+  ActionDispatcher<OUT> get $popping;
 
   RouteFuture<State, StateBuilder, OUT, Actions, Route> get future =>
       $store.service<RouterService>().activeRouteByType(Actions)?.future;
@@ -489,6 +518,17 @@ abstract class RouteActions<
   }
 
   bool $canPop() => true;
+
+  bool $pop(Store store, [OUT result]) {
+    final service = store.service<RouterService>();
+    final active = service.activeOfType($actionsType);
+    if (active == null) return false;
+
+    active.future.complete(CommandResultCode.done,
+        response: RouteResult<OUT>((b) => b..value = result));
+
+    return true;
+  }
 
   @override
   void $reducer(ReducerBuilder reducer) {
@@ -502,17 +542,33 @@ abstract class RouteActions<
     super.$middleware(builder);
 
     builder.nest(this)
-      ..add($activatedAction, (api, next, action) {})
-      ..add($deactivatedAction, (api, next, action) {})
-      ..add($pushAction, (api, next, action) {
-        final service = api.store.service<RouterService>();
-//        $onRoutePush(api.store, api.state, action.payload);
+      ..add($activated, (api, next, action) {
+        next(action);
+        $didActivate(api.store, api.state);
       })
-      ..add($popAction, (api, next, action) {
-        final service = api.store.service<RouterService>();
-//        $onRoutePop(api.store, api.state, action.payload);
+      ..add($deactivated, (api, next, action) {
+        next(action);
+        $didDeactivate(api.store, api.state);
+      })
+      ..add($pushing, (api, next, action) {
+        next(action);
+        $onPush(api.store, api.state);
+//        final service = api.store.service<RouterService>();
+      })
+      ..add($popping, (api, next, action) {
+        next(action);
+        $onPop(api.store, api.state, action.payload);
+//        final service = api.store.service<RouterService>();
       });
   }
+
+  void $onPush(Store store, State state) {}
+
+  void $onPop(Store store, State state, OUT result) {}
+
+  void $didActivate(Store store, State state) {}
+
+  void $didDeactivate(Store store, State state) {}
 }
 
 @BuiltValueEnum(wireName: 'modux/RouteCommandAction')
@@ -610,6 +666,7 @@ abstract class RouteDispatcher<
 
   Command<RouteCommand<State>> create(
       {State state,
+      StateBuilder Function(StateBuilder) builder,
       bool inflating = false,
       RouteType routeType,
       RouteCommandAction action,
@@ -621,6 +678,12 @@ abstract class RouteDispatcher<
     final route = service.routesByName[$name];
     if (route == null)
       throw RouteConfigError('Route named [${$name}] was not registered');
+
+    if (builder != null) {
+      state = builder(route.toActions.$initialBuilder)?.build() ??
+          state ??
+          route.toActions.$initial;
+    }
 
     try {
       if (!route.toActions.$ensureState($store, state)) {
@@ -652,6 +715,7 @@ abstract class RouteDispatcher<
 
   void call(
       {State state,
+      StateBuilder Function(StateBuilder) builder,
       bool inflating = false,
       RouteType routeType,
       RouteCommandAction action,
@@ -659,6 +723,7 @@ abstract class RouteDispatcher<
       Duration timeout = Duration.zero}) {
     final command = create(
         state: state,
+        builder: builder,
         inflating: inflating,
         routeType: routeType,
         action: action,
