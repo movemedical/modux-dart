@@ -142,30 +142,11 @@ abstract class CommandDispatcher<REQ, RESP,
                   StoreActions>>(
           Store<State, StateBuilder, StoreActions> store,
           Function(ModuxEvent<CommandPayload<REQ, RESP, Actions, Command<REQ>>>,
-                  Command<REQ>, REQ)
+                  Command<REQ>)
               handler) =>
       store.listen<CommandPayload<REQ, RESP, Actions, Command<REQ>>>($execute,
           (event) {
-        handler?.call(
-            event, event?.value?.payload, event?.value?.payload?.payload);
-      });
-
-  StoreSubscription<
-      CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>> observeResult<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
-          [Function(
-                  ModuxEvent<
-                      CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>,
-                  CommandResult<RESP>,
-                  RESP)
-              handler]) =>
-      store.listen<CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>(
-          $result, (event) {
-        handler?.call(
-            event, event?.value?.payload, event?.value?.payload?.value);
+        handler?.call(event, event?.value?.payload);
       });
 
   StoreSubscription<
@@ -348,7 +329,7 @@ abstract class CommandPayload<REQ, RESP,
         ..dispatcher = dispatcher);
 }
 
-@BuiltValue(wireName: 'redux/Command')
+@BuiltValue(wireName: 'modux/Command')
 abstract class Command<REQ>
     implements Built<Command<REQ>, CommandBuilder<REQ>> {
   static Serializer<Command> get serializer => _$commandSerializer;
@@ -373,7 +354,7 @@ abstract class Command<REQ>
           .build();
 }
 
-@BuiltValueEnum(wireName: 'redux/CommandStatus')
+@BuiltValueEnum(wireName: 'modux/CommandStatus')
 class CommandStatus extends EnumClass {
   static Serializer<CommandStatus> get serializer => _$commandStatusSerializer;
 
@@ -396,7 +377,7 @@ class CommandStatus extends EnumClass {
   static CommandStatus valueOf(String name) => _$commandStatusValueOf(name);
 }
 
-@BuiltValue(wireName: 'redux/CommandProgress')
+@BuiltValue(wireName: 'modux/CommandProgress')
 abstract class CommandProgress
     implements Built<CommandProgress, CommandProgressBuilder> {
   DateTime get started;
@@ -438,7 +419,7 @@ abstract class CommandProgress
   static const Duration INF = Duration(seconds: -1);
 }
 
-@BuiltValue(wireName: 'redux/CommandResult')
+@BuiltValue(wireName: 'modux/CommandResult')
 abstract class CommandResult<RESP>
     implements Built<CommandResult<RESP>, CommandResultBuilder<RESP>> {
   static Serializer<CommandResult> get serializer => _$commandResultSerializer;
@@ -470,7 +451,7 @@ abstract class CommandResult<RESP>
   bool get isCanceled => code == CommandResultCode.canceled;
 }
 
-@BuiltValueEnum(wireName: 'redux/CommandResultCode')
+@BuiltValueEnum(wireName: 'modux/CommandResultCode')
 class CommandResultCode extends EnumClass {
   static Serializer<CommandResultCode> get serializer =>
       _$commandResultCodeSerializer;
@@ -489,7 +470,7 @@ class CommandResultCode extends EnumClass {
       _$commandResultCodeValueOf(name);
 }
 
-@BuiltValue(wireName: 'redux/CommandState', autoCreateNestedBuilders: false)
+@BuiltValue(wireName: 'modux/CommandState', autoCreateNestedBuilders: false)
 abstract class CommandState<REQ, RESP>
     implements Built<CommandState<REQ, RESP>, CommandStateBuilder<REQ, RESP>> {
   static Serializer<CommandState> get serializer => _$commandStateSerializer;

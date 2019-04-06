@@ -80,7 +80,7 @@ class _$CommandSerializer implements StructuredSerializer<Command> {
   @override
   final Iterable<Type> types = const [Command, _$Command];
   @override
-  final String wireName = 'redux/Command';
+  final String wireName = 'modux/Command';
 
   @override
   Iterable serialize(Serializers serializers, Command object,
@@ -158,7 +158,7 @@ class _$CommandStatusSerializer implements PrimitiveSerializer<CommandStatus> {
   @override
   final Iterable<Type> types = const <Type>[CommandStatus];
   @override
-  final String wireName = 'redux/CommandStatus';
+  final String wireName = 'modux/CommandStatus';
 
   @override
   Object serialize(Serializers serializers, CommandStatus object,
@@ -175,7 +175,7 @@ class _$CommandResultSerializer implements StructuredSerializer<CommandResult> {
   @override
   final Iterable<Type> types = const [CommandResult, _$CommandResult];
   @override
-  final String wireName = 'redux/CommandResult';
+  final String wireName = 'modux/CommandResult';
 
   @override
   Iterable serialize(Serializers serializers, CommandResult object,
@@ -271,7 +271,7 @@ class _$CommandResultCodeSerializer
   @override
   final Iterable<Type> types = const <Type>[CommandResultCode];
   @override
-  final String wireName = 'redux/CommandResultCode';
+  final String wireName = 'modux/CommandResultCode';
 
   @override
   Object serialize(Serializers serializers, CommandResultCode object,
@@ -288,7 +288,7 @@ class _$CommandStateSerializer implements StructuredSerializer<CommandState> {
   @override
   final Iterable<Type> types = const [CommandState, _$CommandState];
   @override
-  final String wireName = 'redux/CommandState';
+  final String wireName = 'modux/CommandState';
 
   @override
   Iterable serialize(Serializers serializers, CommandState object,
