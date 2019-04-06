@@ -1,6 +1,7 @@
 import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
+import 'package:logging/logging.dart';
 
 import 'dart:collection';
 
@@ -34,6 +35,7 @@ class RouteEntry {
   final RouteDispatcher dispatcher;
   final ModuxActions fromActions;
   final RouteActions toActions;
+  PlatformRouteBuilder _platformBuilder;
 
   RouteFuture get future => _active?.future;
 
@@ -41,6 +43,12 @@ class RouteEntry {
 
   ActiveRoute get active => _active;
   bool get isActive => _active != null;
+
+  PlatformRouteBuilder get platformBuilder => _platformBuilder;
+
+  set platformBuilder(PlatformRouteBuilder builder) {
+    _platformBuilder = builder;
+  }
 
   RouteEntry(
       this.key, this.store, this.dispatcher, this.fromActions, this.toActions);
@@ -149,6 +157,7 @@ class ActiveRoute {
   RouteCommandAction get action => future?.routeAction;
 }
 
+/// Provides stack mutation for a RouterPlugin.
 class RouterServiceMutator<T> {
   final RouterService service;
 
@@ -165,18 +174,19 @@ class RouterServiceMutator<T> {
   void replace(dynamic oldRoute, dynamic newRoute) {
     service._replace(oldRoute, newRoute);
   }
+
+  void sync() {
+    service._syncState();
+  }
 }
 
 ///
 class RouterService implements StoreService, RouterRegistry {
   final Store store;
 
-  BuiltList<RouteEntry> _stack = BuiltList<RouteEntry>();
   RouterServiceMutator _mutator;
-  final _s = List<ActiveRoute>();
+  final _stack = List<ActiveRoute>();
   final _byPlatform = LinkedHashMap<dynamic, ActiveRoute>();
-
-//  final _activeByToType = LinkedHashMap<Type, RouteEntry>();
 
   final HasRouterActions actions;
   RouterRegistry _registry;
@@ -227,12 +237,51 @@ class RouterService implements StoreService, RouterRegistry {
 
   HasRouterState get state => actions.$mapState(store.state);
 
-  BuiltList<RouteEntry> get stack => BuiltList<RouteEntry>(_stack);
+  /// Immutable copy of the active stack.
+  BuiltList<ActiveRoute> get stack => BuiltList<ActiveRoute>(_stack);
 
-  ActiveRoute findByPlatformRoute(dynamic platform) =>
-      _byPlatform[platform] ??
-      _s?.firstWhere((e) => e.platform == platform ?? false,
+  /// Find the active route based on RouteDispatcher name.
+  ActiveRoute activeOfName(String name) =>
+      _stack?.firstWhere((a) => a.entry?.dispatcher?.$name == name ?? false,
           orElse: () => null);
+
+  int indexOfName(String name) {
+    for (var i = 0; i < _stack.length; i++) {
+      if (_stack[i]?.entry?.dispatcher?.$name == name ?? false) return i;
+    }
+    return -1;
+  }
+
+  /// Find the active route of a RouteActions type.
+  ActiveRoute activeOfType(Type type) => _stack?.firstWhere(
+      (a) => a.entry?.dispatcher?.$toActionsType == type ?? false,
+      orElse: () => null);
+
+  /// Find the active route of a platform route instance.
+  ActiveRoute activeOfPlatform(dynamic platform) =>
+      // Check the byPlatform map first.
+      _byPlatform[platform] ??
+      _stack?.firstWhere((e) => e.platform == platform ?? false,
+          orElse: () => null);
+
+  /// Get ActiveRoute by index in Stack.
+  operator [](int index) =>
+      index > -1 && index < _stack.length ? _stack[index] : null;
+
+  int indexOfPlatform(dynamic route) {
+    for (var i = 0; i < _stack.length; i++) {
+      if (_stack[i].platform == route) return i;
+    }
+    return -1;
+  }
+
+  int indexOfType(Type type) {
+    for (var i = 0; i < _stack.length; i++) {
+      if (_stack[i]?.entry?.dispatcher?.$toActionsType == type ?? false)
+        return i;
+    }
+    return -1;
+  }
 
   @override
   void init() {}
@@ -240,6 +289,7 @@ class RouterService implements StoreService, RouterRegistry {
   @override
   void dispose() {}
 
+  /// Attempts to restore Router UI state on startup.
   void inflate() {
 //    try {
 //      (state.stack ?? BuiltList<String>())
@@ -263,29 +313,15 @@ class RouterService implements StoreService, RouterRegistry {
 //    store.actions.nav.navStack(BuiltList<String>(_stack.map((v) => v.name)));
   }
 
-  /// Given a Platform Route object, find an associated active RouteFuture.
-  ActiveRoute byPlatformRoute(dynamic route) =>
-      // Search the stack.
-      _s.firstWhere((r) => r.platform == route, orElse: () => null);
-
-  operator [](int index) => index > -1 && index < _s.length ? _s[index] : null;
-
-  int indexOfPlatform(dynamic route) {
-    for (var i = 0; i < _s.length; i++) {
-      if (_s[i].platform == route) return i;
-    }
-    return -1;
-  }
-
   void _push(dynamic route) {
     final index = indexOfPlatform(route);
     if (index != -1) return;
     final r = _byPlatform.remove(route);
 
     if (r == null) {
-      _s.add(ActiveRoute(route, null, null));
+      _stack.add(ActiveRoute(route, null, null));
     } else {
-      _s.add(r);
+      _stack.add(r);
     }
   }
 
@@ -293,16 +329,16 @@ class RouterService implements StoreService, RouterRegistry {
     final index = indexOfPlatform(oldRoute);
     final n = _byPlatform.remove(newRoute);
     if (index == -1) {
-      _s.add(n);
-      sync();
+      _stack.add(n);
+      _syncState();
       return;
     }
 
-    final o = _s[index];
+    final o = _stack[index];
     _byPlatform.remove(oldRoute);
     o.future.complete(CommandResultCode.done);
-    _s[index] = n;
-    sync();
+    _stack[index] = n;
+    _syncState();
   }
 
   void _pop(dynamic platform) {
@@ -312,31 +348,31 @@ class RouterService implements StoreService, RouterRegistry {
     // Find index in stack.
     final index = indexOfPlatform(platform);
     if (index == -1) return;
-    if (index == _s.length - 1) {
-      sync();
-      _s.removeLast();
+    if (index == _stack.length - 1) {
+      _syncState();
+      _stack.removeLast();
       return;
     }
 
-    final route = _s[index];
+    final route = _stack[index];
 
-    final truncated = List.of(_s.sublist(index + 1));
-    final l = _s.length;
+    final truncated = List.of(_stack.sublist(index + 1));
+    final l = _stack.length;
     for (int i = index; i < l; i++) {
-      _s.removeLast();
+      _stack.removeLast();
     }
     for (int i = truncated.length - 1; i > -1; i--) {
       _plugin?.pop(truncated[i], null);
     }
 
-    sync();
+    _syncState();
   }
 
   void _execute(RouteFuture future) {
     final toActionsType = future.dispatcher.$toActionsType;
 
     // Ensure Route isn't already in the stack.
-    if (_s?.where((a) => a.entry != null)?.firstWhere(
+    if (_stack?.where((a) => a.entry != null)?.firstWhere(
             (a) => a.entry.toActions?.$actionsType == toActionsType,
             orElse: () => null) !=
         null) {
@@ -344,22 +380,36 @@ class RouterService implements StoreService, RouterRegistry {
       return;
     }
 
-    final platform = _plugin?.createRoute(future);
+    dynamic platform;
+    try {
+      platform = _plugin?.createRoute(future);
+    } catch (e, stackTrace) {
+      future.complete(CommandResultCode.error, message: e?.toString());
+      return;
+    }
+
     if (platform == null) {
       future.cancel('createRoute() returned null');
       return;
     }
 
-    switch (future.routeType) {
-      case RouteType.page:
-        break;
-      case RouteType.dialog:
-        break;
-      case RouteType.bottomSheet:
-        break;
-      case RouteType.fullscreen:
-        break;
-    }
+//    switch (future.routeType) {
+//      case RouteType.page:
+//        break;
+//      case RouteType.dialog:
+//        break;
+//      case RouteType.bottomSheet:
+//        break;
+//      case RouteType.fullscreen:
+//        break;
+//    }
+
+//    if (!future.entry.toActions
+//        .$ensureState(store, future.command?.payload?.state)) {
+//      future.cancel(
+//          'failed to ensureState for RouteActions [${future.entry.toActions.$name}]');
+//      return;
+//    }
 
     final route = ActiveRoute(platform, future.entry, future);
     _byPlatform[platform] = route;
@@ -373,7 +423,7 @@ class RouterService implements StoreService, RouterRegistry {
         var replaceName = future.command?.payload?.replaceName ?? '';
         ActiveRoute replaceRoute = null;
         if (replaceName.isEmpty) {
-          replaceRoute = _s.isNotEmpty ? _s.last : null;
+          replaceRoute = _stack.isNotEmpty ? _stack.last : null;
         }
 
         if (replaceRoute != null) {
@@ -384,7 +434,7 @@ class RouterService implements StoreService, RouterRegistry {
         break;
 
       case RouteCommandAction.popAndPush:
-        if (_s.isNotEmpty) _plugin?.pop(_s.last, null);
+        if (_stack.isNotEmpty) _plugin?.pop(_stack.last, null);
         _plugin?.push(route);
         break;
     }
@@ -393,18 +443,21 @@ class RouterService implements StoreService, RouterRegistry {
   void _done(RouteFuture future, CommandResult<RouteResult> result) {
     try {
       if (_stack.isEmpty) return;
-      final index = _s.indexOf(future.active);
+      final index = _stack.indexOf(future.active);
       if (index < 0) return;
 
       // Sync.
       _plugin?.pop(future.active, result);
     } finally {
-      sync();
+      _syncState();
     }
   }
 
-  void sync() {
-    actions?.stack(BuiltList<String>(_s.map((a) => a.future.dispatcher.$name)));
+  void _syncState() {
+    final next = _stack.map((a) => a.future.dispatcher.$name);
+    if (state?.stack != next) {
+      actions?.stack(next);
+    }
   }
 }
 
@@ -569,6 +622,16 @@ abstract class RouteDispatcher<
     if (route == null)
       throw RouteConfigError('Route named [${$name}] was not registered');
 
+    try {
+      if (!route.toActions.$ensureState($store, state)) {
+        throw StateError(
+            'Command state [${route.toActions.$name}] cannot be initialized. '
+            'Parent state [${route.toActions.$options.parent.name}] is null');
+      }
+    } catch (e) {
+      // Ignore.
+    }
+
     if (state == null) state = route.toActions.$initial;
 
     final b = RouteCommandBuilder<State>()
@@ -601,7 +664,6 @@ abstract class RouteDispatcher<
         action: action,
         replaceName: replaceName,
         timeout: timeout);
-
     execute(command);
   }
 

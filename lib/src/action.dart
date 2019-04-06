@@ -413,12 +413,14 @@ abstract class StatefulActions<
       ActionHandler next,
       Action<LocalState> action) {}
 
-  bool $ensureState(Store store) {
-//    final store = $store;
-//    if (store == null) throw StateError('Store was not initialized');
-
-    dynamic state = $mapState(store.state);
-    if (state != null) return true;
+  bool $ensureState(Store store, [LocalState state]) {
+    dynamic current = $mapState(store.state);
+    if (current != null) {
+      if (this is StatefulActions && state != null) {
+        $reset(state);
+      }
+      return true;
+    }
 
     var parent = $mapParent(store.actions);
     if (parent == null) {
@@ -426,7 +428,7 @@ abstract class StatefulActions<
         parent.$reset();
       }
       if (this is StatefulActions) {
-        $reset();
+        $reset(state);
       }
       return true;
     }
@@ -438,7 +440,7 @@ abstract class StatefulActions<
     parentState = parent.$mapState(store.state);
     if (parentState == null) return false;
 
-    $reset();
+    $reset(state);
     return $mapState(store.state) != null;
   }
 }
