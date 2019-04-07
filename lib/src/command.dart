@@ -37,42 +37,85 @@ abstract class StandardCommandDispatcher<REQ, RESP,
           .build());
 }
 
-///
-abstract class CommandDispatcher<REQ, RESP,
-        Actions extends CommandDispatcher<REQ, RESP, Actions>>
-    extends StatefulActions<CommandState<REQ, RESP>,
-        CommandStateBuilder<REQ, RESP>, Actions> {
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, String>> get $clear;
+abstract class BuiltCommandDispatcher<
+    Cmd extends Built<Cmd, CmdBuilder>,
+    CmdBuilder extends Builder<Cmd, CmdBuilder>,
+    Result extends Built<Result, ResultBuilder>,
+    ResultBuilder extends Builder<Result, ResultBuilder>,
+    Actions extends BuiltCommandDispatcher<
+        Cmd,
+        CmdBuilder,
+        Result,
+        ResultBuilder,
+        Actions>> extends CommandDispatcher<Cmd, Result, Actions> {
+  CmdBuilder newCommandBuilder();
 
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, String>> get $cancel;
-
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, Command<REQ>>>
-      get $execute;
-
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>
-      get $result;
-
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, String>> get $detach;
-
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, String>> get $attach;
-
-  ActionDispatcher<CommandPayload<REQ, RESP, Actions, CommandProgress>>
-      get $progress;
-
-  Type get commandType => REQ.runtimeType;
+  ResultBuilder newResultBuilder();
 
   Serializer get commandSerializer => null;
 
-  Type get responseType => RESP.runtimeType;
-
   Serializer get resultSerializer => null;
+}
 
-  Type get dispatcherType => CommandDispatcher;
+abstract class NestedBuiltCommandDispatcher<
+    Cmd extends Built<Cmd, CmdBuilder>,
+    CmdBuilder extends Builder<Cmd, CmdBuilder>,
+    CmdPayload extends Built<CmdPayload, CmdPayloadBuilder>,
+    CmdPayloadBuilder extends Builder<CmdPayload, CmdPayloadBuilder>,
+    Result extends Built<Result, ResultBuilder>,
+    ResultBuilder extends Builder<Result, ResultBuilder>,
+    ResultPayload extends Built<ResultPayload, ResultPayloadBuilder>,
+    ResultPayloadBuilder extends Builder<ResultPayload, ResultPayloadBuilder>,
+    Actions extends NestedBuiltCommandDispatcher<
+        Cmd,
+        CmdBuilder,
+        CmdPayload,
+        CmdPayloadBuilder,
+        Result,
+        ResultBuilder,
+        ResultPayload,
+        ResultPayloadBuilder,
+        Actions>> extends BuiltCommandDispatcher<Cmd, CmdBuilder, Result,
+    ResultBuilder, Actions> {
+  CmdPayloadBuilder newCommandPayloadBuilder();
 
-  CommandFuture<REQ, RESP, Actions> newFuture(Command<REQ> command);
+  ResultPayloadBuilder newResultPayloadBuilder();
 
-  void execute(Command<REQ> command) {
-    final payload = payloadOf<Command<REQ>>(command);
+  Serializer get commandPayloadSerializer => null;
+
+  Serializer get resultPayloadSerializer => null;
+}
+
+///
+abstract class CommandDispatcher<Cmd, Result,
+        Actions extends CommandDispatcher<Cmd, Result, Actions>>
+    extends StatefulActions<CommandState<Cmd, Result>,
+        CommandStateBuilder<Cmd, Result>, Actions> {
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $clear;
+
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $cancel;
+
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>
+      get $execute;
+
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
+      get $result;
+
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $detach;
+
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $attach;
+
+  ActionDispatcher<CommandPayload<Cmd, Result, Actions, CommandProgress>>
+      get $progress;
+
+  Type get commandType => Cmd.runtimeType;
+
+  Type get resultType => Result.runtimeType;
+
+  CommandFuture<Cmd, Result, Actions> newFuture(Command<Cmd> command);
+
+  void execute(Command<Cmd> command) {
+    final payload = payloadOf<Command<Cmd>>(command);
     try {
       if (!$ensureState($store)) {
         throw StateError('Command state [${$name}] cannot be initialized. '
@@ -102,22 +145,24 @@ abstract class CommandDispatcher<REQ, RESP,
         builder?.status = CommandStatus.canceling;
       })
       ..add($execute, (state, builder,
-          Action<CommandPayload<REQ, RESP, Actions, Command<REQ>>> action) {
+          Action<CommandPayload<Cmd, Result, Actions, Command<Cmd>>> action) {
         if (builder == null) return;
         // Set request.
         builder.command = action.payload.payload.toBuilder();
         // Set to 'calling'.
         builder.status = CommandStatus.executing;
       })
-      ..add($progress, (state, builder,
-          Action<CommandPayload<REQ, RESP, Actions, CommandProgress>> action) {
+      ..add($progress, (state,
+          builder,
+          Action<CommandPayload<Cmd, Result, Actions, CommandProgress>>
+              action) {
         if (builder == null) return;
         // Set progress.
         builder.progress = action.payload.payload.toBuilder();
       })
       ..add($result, (state,
           builder,
-          Action<CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>
+          Action<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
               action) {
         if (builder == null) return;
         final req = builder.command;
@@ -135,77 +180,81 @@ abstract class CommandDispatcher<REQ, RESP,
       });
   }
 
-  StoreSubscription<CommandPayload<REQ, RESP, Actions, Command<REQ>>> onExecute<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(
-          Store<State, StateBuilder, StoreActions> store,
-          Function(ModuxEvent<CommandPayload<REQ, RESP, Actions, Command<REQ>>>,
-                  Command<REQ>)
-              handler) =>
-      store.listen<CommandPayload<REQ, RESP, Actions, Command<REQ>>>($execute,
-          (event) {
-        handler?.call(event, event?.value?.payload);
-      });
+  StoreSubscription<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>
+      onExecute<
+                  State extends Built<State, StateBuilder>,
+                  StateBuilder extends Builder<State, StateBuilder>,
+                  StoreActions extends ModuxActions<State, StateBuilder,
+                      StoreActions>>(
+              Store<State, StateBuilder, StoreActions> store,
+              Function(
+                      ModuxEvent<
+                          CommandPayload<Cmd, Result, Actions, Command<Cmd>>>,
+                      Command<Cmd>)
+                  handler) =>
+          store.listen<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>(
+              $execute, (event) {
+            handler?.call(event, event?.value?.payload);
+          });
 
   StoreSubscription<
-      CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>> onResult<
+      CommandPayload<Cmd, Result, Actions, CommandResult<Result>>> onResult<
               State extends Built<State, StateBuilder>,
               StateBuilder extends Builder<State, StateBuilder>,
               StoreActions extends ModuxActions<State, StateBuilder,
                   StoreActions>>(Store<State, StateBuilder, StoreActions> store,
           [Function(
                   ModuxEvent<
-                      CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>,
-                  CommandResult<RESP>)
+                      CommandPayload<Cmd, Result, Actions,
+                          CommandResult<Result>>>,
+                  CommandResult<Result>)
               handler]) =>
-      store.listen<CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>(
+      store.listen<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>(
           $result, (event) {
         handler?.call(event, event?.value?.payload);
       });
 
-  StoreSubscription<CommandPayload<REQ, RESP, Actions, String>> onClear<
+  StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onClear<
               State extends Built<State, StateBuilder>,
               StateBuilder extends Builder<State, StateBuilder>,
               StoreActions extends ModuxActions<State, StateBuilder,
                   StoreActions>>(Store<State, StateBuilder, StoreActions> store,
-          [Function(ModuxEvent<CommandPayload<REQ, RESP, Actions, String>>,
+          [Function(ModuxEvent<CommandPayload<Cmd, Result, Actions, String>>,
                   String)
               handler]) =>
-      store.listen<CommandPayload<REQ, RESP, Actions, String>>($clear, (event) {
-        handler?.call(event, event?.value?.payload);
-      });
-
-  StoreSubscription<CommandPayload<REQ, RESP, Actions, String>> onCancel<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
-          [Function(ModuxEvent<CommandPayload<REQ, RESP, Actions, String>>,
-                  String)
-              handler]) =>
-      store.listen<CommandPayload<REQ, RESP, Actions, String>>($cancel,
+      store.listen<CommandPayload<Cmd, Result, Actions, String>>($clear,
           (event) {
         handler?.call(event, event?.value?.payload);
       });
 
-  StoreSubscription<CommandPayload<REQ, RESP, Actions, CommandProgress>>
-      onProgress<
-                  State extends Built<State, StateBuilder>,
-                  StateBuilder extends Builder<State, StateBuilder>,
-                  StoreActions extends ModuxActions<State, StateBuilder,
-                      StoreActions>>(
-              Store<State, StateBuilder, StoreActions> store,
-              [Function(
-                      ModuxEvent<
-                          CommandPayload<REQ, RESP, Actions, CommandProgress>>,
-                      CommandProgress)
-                  handler]) =>
-          store.listen<CommandPayload<REQ, RESP, Actions, CommandProgress>>(
-              $progress, (event) {
-            handler?.call(event, event?.value?.payload);
-          });
+  StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onCancel<
+              State extends Built<State, StateBuilder>,
+              StateBuilder extends Builder<State, StateBuilder>,
+              StoreActions extends ModuxActions<State, StateBuilder,
+                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
+          [Function(ModuxEvent<CommandPayload<Cmd, Result, Actions, String>>,
+                  String)
+              handler]) =>
+      store.listen<CommandPayload<Cmd, Result, Actions, String>>($cancel,
+          (event) {
+        handler?.call(event, event?.value?.payload);
+      });
+
+  StoreSubscription<
+      CommandPayload<Cmd, Result, Actions, CommandProgress>> onProgress<
+              State extends Built<State, StateBuilder>,
+              StateBuilder extends Builder<State, StateBuilder>,
+              StoreActions extends ModuxActions<State, StateBuilder,
+                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
+          [Function(
+                  ModuxEvent<
+                      CommandPayload<Cmd, Result, Actions, CommandProgress>>,
+                  CommandProgress)
+              handler]) =>
+      store.listen<CommandPayload<Cmd, Result, Actions, CommandProgress>>(
+          $progress, (event) {
+        handler?.call(event, event?.value?.payload);
+      });
 
   @override
   @mustCallSuper
@@ -219,16 +268,16 @@ abstract class CommandDispatcher<REQ, RESP,
       ..add($progress, middlewareProgress);
   }
 
-  CommandPayload<REQ, RESP, Actions, T> payloadOf<T>(T payload) =>
-      (CommandPayloadBuilder<REQ, RESP, Actions, T>()
+  CommandPayload<Cmd, Result, Actions, T> payloadOf<T>(T payload) =>
+      (CommandPayloadBuilder<Cmd, Result, Actions, T>()
             ..dispatcher = this
             ..detached = false
             ..payload = payload)
           .build();
 
-  void send(REQ request, {String id = '', int timeout = 15000}) =>
-      $execute((CommandPayload<REQ, RESP, Actions, Command<REQ>>(
-          Command<REQ>((b) => b
+  void send(Cmd request, {String id = '', int timeout = 15000}) =>
+      $execute((CommandPayload<Cmd, Result, Actions, Command<Cmd>>(
+          Command<Cmd>((b) => b
             ..id = id == null || id.isEmpty ? uuid.next() : id
             ..payload = request
             ..timeout = timeout),
@@ -236,33 +285,33 @@ abstract class CommandDispatcher<REQ, RESP,
 
   ///
   void clear([String id]) =>
-      $clear(CommandPayload<REQ, RESP, Actions, String>(id ?? '', this));
+      $clear(CommandPayload<Cmd, Result, Actions, String>(id ?? '', this));
 
   ///
   void cancel([String id]) =>
-      $clear(CommandPayload<REQ, RESP, Actions, String>(id ?? '', this));
+      $clear(CommandPayload<Cmd, Result, Actions, String>(id ?? '', this));
 
   void detach([String id]) => cancel(id);
 
   ///
   @protected
   void middlewareExecute(
-      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<REQ, RESP>,
-              CommandStateBuilder<REQ, RESP>, Actions>
+      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<Cmd, Result>,
+              CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<REQ, RESP, Actions, Command<REQ>>> action) async {
+      Action<CommandPayload<Cmd, Result, Actions, Command<Cmd>>> action) async {
     next(action);
   }
 
   ///
   @protected
   void middlewareResult(
-      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<REQ, RESP>,
-              CommandStateBuilder<REQ, RESP>, Actions>
+      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<Cmd, Result>,
+              CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<REQ, RESP, Actions, CommandResult<RESP>>>
+      Action<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
           action) async {
     next(action);
   }
@@ -270,22 +319,22 @@ abstract class CommandDispatcher<REQ, RESP,
   ///
   @protected
   void middlewareCancel(
-      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<REQ, RESP>,
-              CommandStateBuilder<REQ, RESP>, Actions>
+      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<Cmd, Result>,
+              CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<REQ, RESP, Actions, String>> action) async {
+      Action<CommandPayload<Cmd, Result, Actions, String>> action) async {
     next(action);
   }
 
   ///
   @protected
   void middlewareProgress(
-      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<REQ, RESP>,
-              CommandStateBuilder<REQ, RESP>, Actions>
+      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<Cmd, Result>,
+              CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<REQ, RESP, Actions, CommandProgress>>
+      Action<CommandPayload<Cmd, Result, Actions, CommandProgress>>
           action) async {
     next(action);
   }
@@ -293,11 +342,11 @@ abstract class CommandDispatcher<REQ, RESP,
   ///
   @protected
   void middlewareClear(
-      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<REQ, RESP>,
-              CommandStateBuilder<REQ, RESP>, Actions>
+      NestedMiddlewareApi<dynamic, dynamic, dynamic, CommandState<Cmd, Result>,
+              CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<REQ, RESP, Actions, String>> action) async {
+      Action<CommandPayload<Cmd, Result, Actions, String>> action) async {
     next(action);
   }
 }

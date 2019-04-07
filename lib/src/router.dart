@@ -29,7 +29,7 @@ abstract class RouterPlugin<R> {
 
 typedef PlatformRouteBuilder = Function(RouteFuture);
 
-class RouteEntry {
+class RouteDescriptor {
   final String key;
   final Store store;
   final RouteDispatcher dispatcher;
@@ -50,7 +50,7 @@ class RouteEntry {
     _platformBuilder = builder;
   }
 
-  RouteEntry(
+  RouteDescriptor(
       this.key, this.store, this.dispatcher, this.fromActions, this.toActions);
 }
 
@@ -80,25 +80,25 @@ abstract class RouterRegistry {
 
   BuiltMap<Type, RouteActions> get actionsByType;
 
-  BuiltMap<String, RouteEntry> get routesByName;
+  BuiltMap<String, RouteDescriptor> get routesByName;
 
-  BuiltSetMultimap<Type, RouteEntry> get routesByType;
+  BuiltSetMultimap<Type, RouteDescriptor> get routesByType;
 }
 
 class ReflectiveRouterRegistry implements RouterRegistry {
   final Store store;
   BuiltMap<String, RouteActions> _actionsByName;
   BuiltMap<Type, RouteActions> _actionsByType;
-  BuiltMap<String, RouteEntry> _routesByName;
-  BuiltSetMultimap<Type, RouteEntry> _routesByType;
+  BuiltMap<String, RouteDescriptor> _routesByName;
+  BuiltSetMultimap<Type, RouteDescriptor> _routesByType;
 
   BuiltMap<String, RouteActions> get actionsByName => _actionsByName;
 
   BuiltMap<Type, RouteActions> get actionsByType => _actionsByType;
 
-  BuiltMap<String, RouteEntry> get routesByName => _routesByName;
+  BuiltMap<String, RouteDescriptor> get routesByName => _routesByName;
 
-  BuiltSetMultimap<Type, RouteEntry> get routesByType => _routesByType;
+  BuiltSetMultimap<Type, RouteDescriptor> get routesByType => _routesByType;
 
   ReflectiveRouterRegistry(this.store) {
     final actionsByType = MapBuilder<Type, RouteActions>();
@@ -119,8 +119,8 @@ class ReflectiveRouterRegistry implements RouterRegistry {
     _actionsByName = actionsByName.build();
     _actionsByType = actionsByType.build();
 
-    final routesByName = MapBuilder<String, RouteEntry>();
-    final routesByType = SetMultimapBuilder<Type, RouteEntry>();
+    final routesByName = MapBuilder<String, RouteDescriptor>();
+    final routesByType = SetMultimapBuilder<Type, RouteDescriptor>();
     store.actions.$forEachCommand(store, (owner, cmd) {
       if (cmd is RouteDispatcher) {
         // Find toActions.
@@ -133,7 +133,7 @@ class ReflectiveRouterRegistry implements RouterRegistry {
               '[${cmd.$name}] maps to '
               '[${cmd.$actionsType}] which is not a RouteActions');
 
-        final entry = RouteEntry(cmd.$name, store, cmd, from, to);
+        final entry = RouteDescriptor(cmd.$name, store, cmd, from, to);
 
         routesByName[cmd.$name] = entry;
         routesByType.add(cmd.$actionsType, entry);
@@ -148,7 +148,7 @@ class ReflectiveRouterRegistry implements RouterRegistry {
 class ActiveRoute {
   final dynamic platform;
   final RouteFuture future;
-  final RouteEntry entry;
+  final RouteDescriptor entry;
 
   ActiveRoute(this.platform, this.entry, this.future);
 
@@ -245,12 +245,13 @@ class RouterService implements StoreService, RouterRegistry {
   BuiltMap<Type, RouteActions> get actionsByType => _registry.actionsByType;
 
   @override
-  BuiltMap<String, RouteEntry> get routesByName => _registry.routesByName;
+  BuiltMap<String, RouteDescriptor> get routesByName => _registry.routesByName;
 
   @override
-  BuiltSetMultimap<Type, RouteEntry> get routesByType => _registry.routesByType;
+  BuiltSetMultimap<Type, RouteDescriptor> get routesByType =>
+      _registry.routesByType;
 
-  RouteEntry activeRouteByType(Type type) {
+  RouteDescriptor activeRouteByType(Type type) {
     final routes = routesByType[type];
     if (routes == null || routes.isEmpty) return null;
     for (final route in routes) {
@@ -492,12 +493,14 @@ class RouterService implements StoreService, RouterRegistry {
 
 ///
 abstract class RouteActions<
-        State extends Built<State, StateBuilder>,
-        StateBuilder extends Builder<State, StateBuilder>,
-        OUT,
-        Actions extends RouteActions<State, StateBuilder, OUT, Actions, Route>,
-        Route extends RouteDispatcher<State, StateBuilder, OUT, Actions, Route>>
-    extends StatefulActions<State, StateBuilder, Actions> {
+    State extends Built<State, StateBuilder>,
+    StateBuilder extends Builder<State, StateBuilder>,
+    Result extends Built<Result, ResultBuilder>,
+    ResultBuilder extends Builder<Result, ResultBuilder>,
+    Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
+        Actions, Route>,
+    Route extends RouteDispatcher<State, StateBuilder, Result, ResultBuilder,
+        Actions, Route>> extends StatefulActions<State, StateBuilder, Actions> {
   bool get $isDialog => false;
 
   RouteType get $routeType => RouteType.page;
@@ -508,10 +511,11 @@ abstract class RouteActions<
 
   ActionDispatcher<State> get $pushing;
 
-  ActionDispatcher<OUT> get $popping;
+  ActionDispatcher<Result> get $popping;
 
-  RouteFuture<State, StateBuilder, OUT, Actions, Route> get future =>
-      $store.service<RouterService>().activeRouteByType(Actions)?.future;
+  RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, Route>
+      get future =>
+          $store.service<RouterService>().activeRouteByType(Actions)?.future;
 
   Future<String> $canDeactivate() {
     return Future.value('');
@@ -519,13 +523,24 @@ abstract class RouteActions<
 
   bool $canPop() => true;
 
-  bool $pop(Store store, [OUT result]) {
+  ResultBuilder $newResultBuilder();
+
+  bool $pop(Store store, {Result result, void builder(ResultBuilder b)}) {
+    if (builder != null) {
+      final b = $newResultBuilder();
+      builder(b);
+      result = b.build();
+    }
+
     final service = store.service<RouterService>();
+    if (service == null)
+      throw StateError('RouterService not registered in store');
+
     final active = service.activeOfType($actionsType);
     if (active == null) return false;
 
     active.future.complete(CommandResultCode.done,
-        response: RouteResult<OUT>((b) => b..value = result));
+        response: RouteResult<Result>((b) => b..value = result));
 
     return true;
   }
@@ -564,7 +579,7 @@ abstract class RouteActions<
 
   void $onPush(Store store, State state) {}
 
-  void $onPop(Store store, State state, OUT result) {}
+  void $onPop(Store store, State state, Result result) {}
 
   void $didActivate(Store store, State state) {}
 
@@ -653,16 +668,27 @@ abstract class RouteResult<T>
 
 /// RouteDispatcher
 abstract class RouteDispatcher<
-        State extends Built<State, StateBuilder>,
-        StateBuilder extends Builder<State, StateBuilder>,
-        OUT,
-        Actions extends RouteActions<State, StateBuilder, OUT, Actions, D>,
-        D extends RouteDispatcher<State, StateBuilder, OUT, Actions, D>>
-    extends CommandDispatcher<RouteCommand<State>, RouteResult<OUT>, D> {
+    State extends Built<State, StateBuilder>,
+    StateBuilder extends Builder<State, StateBuilder>,
+    Result extends Built<Result, ResultBuilder>,
+    ResultBuilder extends Builder<Result, ResultBuilder>,
+    Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
+        Actions, D>,
+    D extends RouteDispatcher<State, StateBuilder, Result, ResultBuilder,
+        Actions, D>> extends NestedBuiltCommandDispatcher<
+    RouteCommand<State>,
+    RouteCommandBuilder<State>,
+    State,
+    StateBuilder,
+    RouteResult<Result>,
+    RouteResultBuilder<Result>,
+    Result,
+    ResultBuilder,
+    D> {
   Type get $toActionsType => Actions;
 
-  RouteFuture<State, StateBuilder, OUT, Actions, D> get future =>
-      $store.service<RouterService>().routesByName[$name]?.future;
+  RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, D>
+      get future => $store.service<RouterService>().routesByName[$name]?.future;
 
   Command<RouteCommand<State>> create(
       {State state,
@@ -733,7 +759,7 @@ abstract class RouteDispatcher<
   }
 
   @override
-  RouteFuture<State, StateBuilder, OUT, Actions, D> newFuture(
+  RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, D> newFuture(
       Command<RouteCommand<State>> command) {
     final service = $store.service<RouterService>();
     if (service == null) throw RouteConfigError('RouterService not registered');
@@ -748,14 +774,21 @@ abstract class RouteDispatcher<
 
 /// RouteFuture
 class RouteFuture<
-        State extends Built<State, StateBuilder>,
-        StateBuilder extends Builder<State, StateBuilder>,
-        OUT,
-        Actions extends RouteActions<State, StateBuilder, OUT, Actions, D>,
-        D extends RouteDispatcher<State, StateBuilder, OUT, Actions, D>>
-    extends CommandFuture<RouteCommand<State>, RouteResult<OUT>, D> {
+    State extends Built<State, StateBuilder>,
+    StateBuilder extends Builder<State, StateBuilder>,
+    Result extends Built<Result, ResultBuilder>,
+    ResultBuilder extends Builder<Result, ResultBuilder>,
+    Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
+        Actions, D>,
+    D extends RouteDispatcher<
+        State,
+        StateBuilder,
+        Result,
+        ResultBuilder,
+        Actions,
+        D>> extends CommandFuture<RouteCommand<State>, RouteResult<Result>, D> {
   final RouterService service;
-  final RouteEntry entry;
+  final RouteDescriptor entry;
   ActiveRoute _active;
 
   ActiveRoute get active => _active;

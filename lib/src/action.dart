@@ -550,16 +550,28 @@ abstract class ModelActions<
             LocalActions>>
     extends StatefulActions<LocalState, LocalStateBuilder, LocalActions> {}
 
-abstract class NoState implements Built<NoState, NoStateBuilder> {
-  NoState._();
+abstract class Empty implements Built<Empty, EmptyBuilder> {
+  Empty._();
 
-  factory NoState([updates(NoStateBuilder b)]) = _$NoState;
+  factory Empty([updates(EmptyBuilder b)]) = _$Empty;
+
+  static Serializer<Empty> get serializer => _$emptySerializer;
+}
+
+abstract class Value<T> implements Built<Value<T>, ValueBuilder<T>> {
+  T get value;
+
+  Value._();
+
+  factory Value([updates(ValueBuilder<T> b)]) = _$Value<T>;
+
+  static Serializer<Value> get serializer => _$valueSerializer;
 }
 
 @immutable
 class StatelessActionsOptions<
-        Actions extends ModuxActions<NoState, NoStateBuilder, Actions>>
-    extends StatefulActionsOptions<NoState, NoStateBuilder, Actions> {
+        Actions extends ModuxActions<Empty, EmptyBuilder, Actions>>
+    extends StatefulActionsOptions<Empty, EmptyBuilder, Actions> {
   StatelessActionsOptions(
       StatefulActionsOptions parent,
       String name,
@@ -568,18 +580,18 @@ class StatelessActionsOptions<
       ModuxActions Function(ModuxActions) parentMapper,
       Actions Function(ModuxActions) mapper)
       : super(parent, name, simpleName, dispatcher, parentMapper, mapper,
-            (s) => NoState(), (b) => NoStateBuilder(), (parent, builder) {});
+            (s) => Empty(), (b) => EmptyBuilder(), (parent, builder) {});
 }
 
 ///
 abstract class StatelessActions<
-        Actions extends ModuxActions<NoState, NoStateBuilder, Actions>>
-    extends ModuxActions<NoState, NoStateBuilder, Actions> {
+        Actions extends ModuxActions<Empty, EmptyBuilder, Actions>>
+    extends ModuxActions<Empty, EmptyBuilder, Actions> {
   @override
-  NoState get $initial => NoState();
+  Empty get $initial => Empty();
 
   @override
-  NoStateBuilder $newBuilder() => NoStateBuilder();
+  EmptyBuilder $newBuilder() => EmptyBuilder();
 
   @override
   bool get $isStateful => false;
