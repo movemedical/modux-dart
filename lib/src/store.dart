@@ -154,7 +154,8 @@ class Store<
 
   T service<T>() => _services[T] as T;
 
-  JsonService get json => _jsonService ??= JsonServiceImpl(this, serializers);
+  JsonService get json =>
+      _jsonService ??= DefaultJsonService(this, serializers);
 
   NextActionHandler Function(MiddlewareApi) get _commandMiddleware =>
       (MiddlewareApi api) => (ActionHandler next) => (Action action) {
@@ -910,12 +911,18 @@ abstract class JsonService implements StoreService {
   Future<T> deserialize<T>(Serializer<T> serializer, dynamic message);
 }
 
+@deprecated
+class JsonServiceImpl extends DefaultJsonService {
+  JsonServiceImpl(Store store, Serializers serializers)
+      : super(store, serializers);
+}
+
 ///
-class JsonServiceImpl extends JsonService {
+class DefaultJsonService extends JsonService {
   final Store store;
   final Serializers serializers;
 
-  JsonServiceImpl(this.store, this.serializers);
+  DefaultJsonService(this.store, this.serializers);
 
   @override
   void init() {}

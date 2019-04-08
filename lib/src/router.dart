@@ -484,7 +484,10 @@ class RouterService implements StoreService, RouterRegistry {
   }
 
   void _syncState() {
-    final next = _stack.map((a) => a.future.dispatcher.$name);
+    final next = BuiltList<String>(_stack
+        .map((a) => a.future?.dispatcher?.$name)
+        .where((a) => a != null)
+        .toList(growable: false));
     if (state?.stack != next) {
       actions?.stack(next);
     }
