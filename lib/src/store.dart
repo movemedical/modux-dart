@@ -266,6 +266,44 @@ class Store<
   }
 
   /// Execute a Command.
+  Future<CommandResult<Result>>
+      executeBuilt<
+              Cmd extends Built<Cmd, CmdBuilder>,
+              CmdBuilder extends Builder<Cmd, CmdBuilder>,
+              CmdPayload extends Built<CmdPayload, CmdPayloadBuilder>,
+              CmdPayloadBuilder extends Builder<CmdPayload, CmdPayloadBuilder>,
+              Result extends Built<Result, ResultBuilder>,
+              ResultBuilder extends Builder<Result, ResultBuilder>,
+              ResultPayload extends Built<ResultPayload, ResultPayloadBuilder>,
+              ResultPayloadBuilder extends Builder<ResultPayload,
+                  ResultPayloadBuilder>,
+              Actions extends NestedBuiltCommandDispatcher<
+                  Cmd,
+                  CmdBuilder,
+                  CmdPayload,
+                  CmdPayloadBuilder,
+                  Result,
+                  ResultBuilder,
+                  ResultPayload,
+                  ResultPayloadBuilder,
+                  Actions>>(Actions dispatcher,
+          {Cmd request,
+          void builder(CmdBuilder b),
+          Duration timeout = const Duration(seconds: 30),
+          String id = ''}) async {
+    dispatcher.execute(Command<Cmd>((b) => b
+      ..id = id == null || id.isEmpty ? uuid.next() : id
+      ..payload = request
+      ..timeout = timeout.inMilliseconds));
+
+    final state = dispatcher.$mapState(_state);
+    if (state == null) return Future.error('Command is null');
+    if (state.isCompleted) return Future.value(state.result);
+
+    return (await actionFuture(dispatcher.$result))?.value?.payload;
+  }
+
+  /// Execute a Command.
   Future<CommandResult<RESP>>
       execute<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
           D dispatcher, REQ request,

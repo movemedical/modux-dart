@@ -373,10 +373,20 @@ class RouterService implements StoreService, RouterRegistry {
 
     // Find index in stack.
     final index = indexOfPlatform(platform);
-    if (index == -1) return;
+    if (index == -1) {
+      return;
+    }
     if (index == _stack.length - 1) {
-      _syncState();
-      _stack.removeLast()?._popping();
+      try {
+        final popped = _stack.removeLast();
+        popped?._popping();
+
+        if (!(popped?.future?.isCompleted ?? true)) {
+          popped?.future?.complete(CommandResultCode.done);
+        }
+      } finally {
+        _syncState();
+      }
       return;
     }
 
@@ -472,7 +482,10 @@ class RouterService implements StoreService, RouterRegistry {
     try {
       if (_stack.isEmpty) return;
       final index = _stack.indexOf(future.active);
-      if (index < 0) return;
+      if (index < 0) {
+        future.active?.entry?.toActions?.$deactivated?.call();
+        return;
+      }
 
       _stack[index]?._popping();
 
@@ -691,9 +704,10 @@ abstract class RouteDispatcher<
   Type get $toActionsType => Actions;
 
   RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, D>
-      get future => $store.service<RouterService>().routesByName[$name]?.future;
+      get routeFuture =>
+          $store.service<RouterService>().routesByName[$name]?.future;
 
-  Command<RouteCommand<State>> create(
+  RouteCommand<State> create(
       {State state,
       StateBuilder Function(StateBuilder) builder,
       bool inflating = false,
@@ -726,20 +740,44 @@ abstract class RouteDispatcher<
 
     if (state == null) state = route.toActions.$initial;
 
-    final b = RouteCommandBuilder<State>()
-      ..name = $options.name
-      ..from = $options.parent?.name ?? ''
-      ..to = route.toActions.$name
-      ..state = state
-      ..action = action
-      ..replaceName = replaceName
-      ..routeType = routeType;
-
-    return (CommandBuilder<RouteCommand<State>>()
-          ..id = ''
-          ..timeout = timeout != Duration.zero ? timeout.inMilliseconds : 0
-          ..payload = b.build())
+    return (RouteCommandBuilder<State>()
+          ..name = $options.name
+          ..from = $options.parent?.name ?? ''
+          ..to = route.toActions.$name
+          ..state = state
+          ..action = action
+          ..replaceName = replaceName
+          ..routeType = routeType)
         .build();
+  }
+
+  Future<CommandResult<RouteResult<Result>>> future(
+      {State state,
+      StateBuilder Function(StateBuilder) builder,
+      bool inflating = false,
+      RouteType routeType,
+      RouteCommandAction action,
+      String replaceName,
+      Duration timeout = Duration.zero}) {
+    final command = create(
+        state: state,
+        builder: builder,
+        inflating: inflating,
+        routeType: routeType,
+        action: action,
+        replaceName: replaceName,
+        timeout: timeout);
+    final future = $options.store.store.executeBuilt<
+        RouteCommand<State>,
+        RouteCommandBuilder<State>,
+        State,
+        StateBuilder,
+        RouteResult<Result>,
+        RouteResultBuilder<Result>,
+        Result,
+        ResultBuilder,
+        D>(this, request: command, timeout: timeout);
+    return future;
   }
 
   void call(
@@ -758,7 +796,7 @@ abstract class RouteDispatcher<
         action: action,
         replaceName: replaceName,
         timeout: timeout);
-    execute(command);
+    execute(Command.of(command, timeout: timeout?.inMilliseconds ?? null));
   }
 
   @override
