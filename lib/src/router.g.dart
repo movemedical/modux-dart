@@ -7,6 +7,8 @@ part of 'router.dart';
 // **************************************************************************
 
 const RouteCommandAction _$wirePush = const RouteCommandAction._('push');
+const RouteCommandAction _$wirePushReplacement =
+    const RouteCommandAction._('pushReplacement');
 const RouteCommandAction _$wirePopAndPush =
     const RouteCommandAction._('popAndPush');
 const RouteCommandAction _$wireReplace = const RouteCommandAction._('replace');
@@ -15,6 +17,8 @@ RouteCommandAction _$routeActionKindValueOf(String name) {
   switch (name) {
     case 'push':
       return _$wirePush;
+    case 'pushReplacement':
+      return _$wirePushReplacement;
     case 'popAndPush':
       return _$wirePopAndPush;
     case 'replace':
@@ -27,6 +31,7 @@ RouteCommandAction _$routeActionKindValueOf(String name) {
 final BuiltSet<RouteCommandAction> _$routeCommandActionValues =
     new BuiltSet<RouteCommandAction>(const <RouteCommandAction>[
   _$wirePush,
+  _$wirePushReplacement,
   _$wirePopAndPush,
   _$wireReplace,
 ]);

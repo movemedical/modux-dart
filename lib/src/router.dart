@@ -20,6 +20,8 @@ abstract class RouterPlugin<R> {
 
   Future push(ActiveRoute route);
 
+  Future pushReplacement(ActiveRoute route);
+
   bool pop(ActiveRoute active, CommandResult<RouteResult> result);
 
   bool canPop();
@@ -362,7 +364,8 @@ class RouterService implements StoreService, RouterRegistry {
 
     final o = _stack[index];
     _byPlatform.remove(oldRoute);
-    o.future.complete(CommandResultCode.done);
+
+    o?.future?.complete(CommandResultCode.done);
     _stack[index] = n;
     _syncState();
   }
@@ -471,9 +474,8 @@ class RouterService implements StoreService, RouterRegistry {
         }
         break;
 
-      case RouteCommandAction.popAndPush:
-        if (_stack.isNotEmpty) _plugin?.pop(_stack.last, null);
-        _plugin?.push(route);
+      case RouteCommandAction.pushReplacement:
+        _plugin?.pushReplacement(route);
         break;
     }
   }
@@ -605,6 +607,7 @@ abstract class RouteActions<
 @BuiltValueEnum(wireName: 'modux/RouteCommandAction')
 class RouteCommandAction extends EnumClass {
   static const RouteCommandAction push = _$wirePush;
+  static const RouteCommandAction pushReplacement = _$wirePushReplacement;
   static const RouteCommandAction popAndPush = _$wirePopAndPush;
   static const RouteCommandAction replace = _$wireReplace;
 
