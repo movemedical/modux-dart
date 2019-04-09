@@ -386,6 +386,8 @@ abstract class StatefulActions<
   @override
   bool get $isStateful => true;
 
+  LocalState get $state => $mapState($store.state);
+
   void $reset([LocalState state]) {
     $replace(state ?? $initial);
   }

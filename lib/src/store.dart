@@ -516,7 +516,7 @@ class ModuxController<
   int addRef() => _refCount++;
 
   void close() {
-    if (_refCount <= 0) throw ClosedException();
+    if (_refCount <= 0) return;
 
     _refCount--;
     if (_refCount > 0) return;

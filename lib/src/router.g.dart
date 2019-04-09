@@ -9,6 +9,8 @@ part of 'router.dart';
 const RouteCommandAction _$wirePush = const RouteCommandAction._('push');
 const RouteCommandAction _$wirePushReplacement =
     const RouteCommandAction._('pushReplacement');
+const RouteCommandAction _$wirePushAndRemoveUntil =
+    const RouteCommandAction._('pushAndRemoveUntil');
 const RouteCommandAction _$wirePopAndPush =
     const RouteCommandAction._('popAndPush');
 const RouteCommandAction _$wireReplace = const RouteCommandAction._('replace');
@@ -19,6 +21,8 @@ RouteCommandAction _$routeActionKindValueOf(String name) {
       return _$wirePush;
     case 'pushReplacement':
       return _$wirePushReplacement;
+    case 'pushAndRemoveUntil':
+      return _$wirePushAndRemoveUntil;
     case 'popAndPush':
       return _$wirePopAndPush;
     case 'replace':
@@ -32,6 +36,7 @@ final BuiltSet<RouteCommandAction> _$routeCommandActionValues =
     new BuiltSet<RouteCommandAction>(const <RouteCommandAction>[
   _$wirePush,
   _$wirePushReplacement,
+  _$wirePushAndRemoveUntil,
   _$wirePopAndPush,
   _$wireReplace,
 ]);
@@ -129,6 +134,12 @@ class _$RouteCommandSerializer implements StructuredSerializer<RouteCommand> {
       'to',
       serializers.serialize(object.to, specifiedType: const FullType(String)),
     ];
+    if (object.transitionDuration != null) {
+      result
+        ..add('transitionDuration')
+        ..add(serializers.serialize(object.transitionDuration,
+            specifiedType: const FullType(Duration)));
+    }
     if (object.action != null) {
       result
         ..add('action')
@@ -141,10 +152,10 @@ class _$RouteCommandSerializer implements StructuredSerializer<RouteCommand> {
         ..add(serializers.serialize(object.routeType,
             specifiedType: const FullType(RouteType)));
     }
-    if (object.replaceName != null) {
+    if (object.predicateName != null) {
       result
-        ..add('replaceName')
-        ..add(serializers.serialize(object.replaceName,
+        ..add('predicateName')
+        ..add(serializers.serialize(object.predicateName,
             specifiedType: const FullType(String)));
     }
     if (object.state != null) {
@@ -193,6 +204,10 @@ class _$RouteCommandSerializer implements StructuredSerializer<RouteCommand> {
           result.to = serializers.deserialize(value,
               specifiedType: const FullType(String)) as String;
           break;
+        case 'transitionDuration':
+          result.transitionDuration = serializers.deserialize(value,
+              specifiedType: const FullType(Duration)) as Duration;
+          break;
         case 'action':
           result.action = serializers.deserialize(value,
                   specifiedType: const FullType(RouteCommandAction))
@@ -202,8 +217,8 @@ class _$RouteCommandSerializer implements StructuredSerializer<RouteCommand> {
           result.routeType = serializers.deserialize(value,
               specifiedType: const FullType(RouteType)) as RouteType;
           break;
-        case 'replaceName':
-          result.replaceName = serializers.deserialize(value,
+        case 'predicateName':
+          result.predicateName = serializers.deserialize(value,
               specifiedType: const FullType(String)) as String;
           break;
         case 'state':
@@ -236,10 +251,12 @@ class _$RouteResultSerializer implements StructuredSerializer<RouteResult> {
     final parameterT =
         isUnderspecified ? FullType.object : specifiedType.parameters[0];
 
-    final result = <Object>[
-      'value',
-      serializers.serialize(object.value, specifiedType: parameterT),
-    ];
+    final result = <Object>[];
+    if (object.value != null) {
+      result
+        ..add('value')
+        ..add(serializers.serialize(object.value, specifiedType: parameterT));
+    }
 
     return result;
   }
@@ -282,11 +299,13 @@ class _$RouteCommand<T> extends RouteCommand<T> {
   @override
   final String to;
   @override
+  final Duration transitionDuration;
+  @override
   final RouteCommandAction action;
   @override
   final RouteType routeType;
   @override
-  final String replaceName;
+  final String predicateName;
   @override
   final T state;
   @override
@@ -299,9 +318,10 @@ class _$RouteCommand<T> extends RouteCommand<T> {
       {this.name,
       this.from,
       this.to,
+      this.transitionDuration,
       this.action,
       this.routeType,
-      this.replaceName,
+      this.predicateName,
       this.state,
       this.inflating})
       : super._() {
@@ -334,9 +354,10 @@ class _$RouteCommand<T> extends RouteCommand<T> {
         name == other.name &&
         from == other.from &&
         to == other.to &&
+        transitionDuration == other.transitionDuration &&
         action == other.action &&
         routeType == other.routeType &&
-        replaceName == other.replaceName &&
+        predicateName == other.predicateName &&
         state == other.state &&
         inflating == other.inflating;
   }
@@ -348,11 +369,13 @@ class _$RouteCommand<T> extends RouteCommand<T> {
             $jc(
                 $jc(
                     $jc(
-                        $jc($jc($jc(0, name.hashCode), from.hashCode),
-                            to.hashCode),
+                        $jc(
+                            $jc($jc($jc(0, name.hashCode), from.hashCode),
+                                to.hashCode),
+                            transitionDuration.hashCode),
                         action.hashCode),
                     routeType.hashCode),
-                replaceName.hashCode),
+                predicateName.hashCode),
             state.hashCode),
         inflating.hashCode));
   }
@@ -363,9 +386,10 @@ class _$RouteCommand<T> extends RouteCommand<T> {
           ..add('name', name)
           ..add('from', from)
           ..add('to', to)
+          ..add('transitionDuration', transitionDuration)
           ..add('action', action)
           ..add('routeType', routeType)
-          ..add('replaceName', replaceName)
+          ..add('predicateName', predicateName)
           ..add('state', state)
           ..add('inflating', inflating))
         .toString();
@@ -388,6 +412,11 @@ class RouteCommandBuilder<T>
   String get to => _$this._to;
   set to(String to) => _$this._to = to;
 
+  Duration _transitionDuration;
+  Duration get transitionDuration => _$this._transitionDuration;
+  set transitionDuration(Duration transitionDuration) =>
+      _$this._transitionDuration = transitionDuration;
+
   RouteCommandAction _action;
   RouteCommandAction get action => _$this._action;
   set action(RouteCommandAction action) => _$this._action = action;
@@ -396,9 +425,10 @@ class RouteCommandBuilder<T>
   RouteType get routeType => _$this._routeType;
   set routeType(RouteType routeType) => _$this._routeType = routeType;
 
-  String _replaceName;
-  String get replaceName => _$this._replaceName;
-  set replaceName(String replaceName) => _$this._replaceName = replaceName;
+  String _predicateName;
+  String get predicateName => _$this._predicateName;
+  set predicateName(String predicateName) =>
+      _$this._predicateName = predicateName;
 
   T _state;
   T get state => _$this._state;
@@ -415,9 +445,10 @@ class RouteCommandBuilder<T>
       _name = _$v.name;
       _from = _$v.from;
       _to = _$v.to;
+      _transitionDuration = _$v.transitionDuration;
       _action = _$v.action;
       _routeType = _$v.routeType;
-      _replaceName = _$v.replaceName;
+      _predicateName = _$v.predicateName;
       _state = _$v.state;
       _inflating = _$v.inflating;
       _$v = null;
@@ -445,9 +476,10 @@ class RouteCommandBuilder<T>
             name: name,
             from: from,
             to: to,
+            transitionDuration: transitionDuration,
             action: action,
             routeType: routeType,
-            replaceName: replaceName,
+            predicateName: predicateName,
             state: state,
             inflating: inflating);
     replace(_$result);
@@ -463,9 +495,6 @@ class _$RouteResult<T> extends RouteResult<T> {
       (new RouteResultBuilder<T>()..update(updates)).build();
 
   _$RouteResult._({this.value}) : super._() {
-    if (value == null) {
-      throw new BuiltValueNullFieldError('RouteResult', 'value');
-    }
     if (T == dynamic) {
       throw new BuiltValueMissingGenericsError('RouteResult', 'T');
     }
