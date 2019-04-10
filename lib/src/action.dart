@@ -27,7 +27,7 @@ class ActionModel {
 
 /// [Action] is the object passed to your reducer to signify the state change
 /// that needs to take place. Action [name]s should always be unique.
-/// Uniqueness is guarenteed when using ReduxActions.
+/// Uniqueness is guaranteed when using ModuxActions.
 @immutable
 class Action<Payload> {
   /// A unique action name.

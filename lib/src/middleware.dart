@@ -1,4 +1,5 @@
 import 'package:built_value/built_value.dart';
+import 'package:built_collection/built_collection.dart';
 
 import 'action.dart';
 import 'store.dart';
@@ -45,14 +46,23 @@ class MiddlewareBuilder<
     State extends Built<State, StateBuilder>,
     StateBuilder extends Builder<State, StateBuilder>,
     Actions extends ModuxActions<State, StateBuilder, Actions>> {
-  var _map = new Map<String,
+  var _map = ListMultimapBuilder<String,
       MiddlewareHandler<State, StateBuilder, Actions, dynamic>>();
+
+  BuiltListMultimap<String,
+      MiddlewareHandler<State, StateBuilder, Actions, dynamic>> _mapBuilt;
+  BuiltListMultimap<String,
+          MiddlewareHandler<State, StateBuilder, Actions, dynamic>>
+      get map => _mapBuilt ??= _map.build();
+
+//  var _map = new Map<String,
+//      MiddlewareHandler<State, StateBuilder, Actions, dynamic>>();
 
   void add<Payload>(ActionName<Payload> aMgr,
       MiddlewareHandler<State, StateBuilder, Actions, Payload> handler) {
-    _map[aMgr.name] = (api, next, action) {
+    _map.add(aMgr.name, (api, next, action) {
       handler(api, next, action as Action<Payload>);
-    };
+    });
   }
 
   NestedMiddlewareBuilder<State, StateBuilder, Actions, NestedState,
@@ -84,11 +94,14 @@ class MiddlewareBuilder<
   Middleware<State, StateBuilder, Actions> build() =>
       (MiddlewareApi<State, StateBuilder, Actions> api) =>
           (ActionHandler next) => (Action<dynamic> action) {
-                var handler = _map[action.name];
-                if (handler != null) {
-                  handler(api, next, action);
-                  return;
-                }
+                map[action.name]
+                    ?.forEach((handler) => handler?.call(api, next, action));
+//                if (handlers != null) {
+//                  for (final h in handlers) {
+//                    h(api, next, action);
+//                  }
+//                  return;
+//                }
 
                 next(action);
               };

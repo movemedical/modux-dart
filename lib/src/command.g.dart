@@ -97,7 +97,8 @@ class _$CommandSerializer implements StructuredSerializer<Command> {
       'payload',
       serializers.serialize(object.payload, specifiedType: parameterREQ),
       'timeout',
-      serializers.serialize(object.timeout, specifiedType: const FullType(int)),
+      serializers.serialize(object.timeout,
+          specifiedType: const FullType(Duration)),
     ];
 
     return result;
@@ -132,7 +133,7 @@ class _$CommandSerializer implements StructuredSerializer<Command> {
           break;
         case 'timeout':
           result.timeout = serializers.deserialize(value,
-              specifiedType: const FullType(int)) as int;
+              specifiedType: const FullType(Duration)) as Duration;
           break;
       }
     }
@@ -515,7 +516,7 @@ class _$Command<REQ> extends Command<REQ> {
   @override
   final REQ payload;
   @override
-  final int timeout;
+  final Duration timeout;
 
   factory _$Command([void updates(CommandBuilder<REQ> b)]) =>
       (new CommandBuilder<REQ>()..update(updates)).build();
@@ -579,9 +580,9 @@ class CommandBuilder<REQ>
   REQ get payload => _$this._payload;
   set payload(REQ payload) => _$this._payload = payload;
 
-  int _timeout;
-  int get timeout => _$this._timeout;
-  set timeout(int timeout) => _$this._timeout = timeout;
+  Duration _timeout;
+  Duration get timeout => _$this._timeout;
+  set timeout(Duration timeout) => _$this._timeout = timeout;
 
   CommandBuilder();
 

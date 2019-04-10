@@ -33,6 +33,39 @@ abstract class StoreService {
   void dispose();
 }
 
+mixin StoreSubscriptionsMixin {
+  final List<StoreSubscription> _subs = [];
+
+  void addSubscription(StoreSubscription s) {
+    _subs.add(s);
+  }
+
+  void disposeSubscriptions() {
+    _subs?.forEach((s) => s.cancel());
+    _subs?.clear();
+  }
+}
+
+abstract class AbstractStoreService<Self>
+    with StoreSubscriptionsMixin
+    implements StoreService {
+  AbstractStoreService(this.store);
+
+  final Store store;
+
+  @override
+  Type get keyType => Self;
+
+  @override
+  void init() {}
+
+  @override
+  @mustCallSuper
+  void dispose() {
+    disposeSubscriptions();
+  }
+}
+
 typedef Serializers SerializersFactory();
 
 /// [Store] is the container of your state. It listens for actions,
@@ -55,6 +88,7 @@ class Store<
   final _nestedMap = LinkedHashMap<String, _NestedEntry>();
   final _controllersMap = LinkedHashMap<String, ModuxController>();
   final _controllerStack = List<ModuxController>();
+  final _subMixinStack = List<StoreSubscriptionsMixin>();
   JsonService _jsonService;
   StreamSubscription _subscription;
 
@@ -146,9 +180,20 @@ class Store<
       if (service == null) return;
       if (service is JsonService) {
         _jsonService = service;
+        _services[JsonService] = service;
+        _services[service.runtimeType] = service;
       }
       _services[service.keyType] = service;
-      service.init();
+      if (service is StoreSubscriptionsMixin) {
+        _subMixinStack.add(service as StoreSubscriptionsMixin);
+        try {
+          service.init();
+        } finally {
+          _subMixinStack.removeLast();
+        }
+      } else {
+        service.init();
+      }
     });
   }
 
@@ -294,7 +339,7 @@ class Store<
     dispatcher.execute(Command<Cmd>((b) => b
       ..id = id == null || id.isEmpty ? uuid.next() : id
       ..payload = request
-      ..timeout = timeout.inMilliseconds));
+      ..timeout = timeout));
 
     final state = dispatcher.$mapState(_state);
     if (state == null) return Future.error('Command is null');
@@ -312,7 +357,7 @@ class Store<
     dispatcher.execute(Command<REQ>((b) => b
       ..id = id == null || id.isEmpty ? uuid.next() : id
       ..payload = request
-      ..timeout = timeout.inMilliseconds));
+      ..timeout = timeout));
 
     final state = dispatcher.$mapState(_state);
     if (state == null) return Future.error('Command is null');
@@ -350,11 +395,15 @@ class Store<
       entry = _ActionEntry(this, dispatcher.name, actions, dispatcher);
       _actionMap[dispatcher.name] = entry;
     }
-    return entry.register<P>(
+    final sub = entry.register<P>(
         scope: currentController,
         dispatcher: dispatcher,
         handler: (_) {},
         mapper: (event) => Ok<P>(event.action.payload as P, event));
+
+    if (_subMixinStack.isNotEmpty) _subMixinStack.last.addSubscription(sub);
+
+    return sub;
   }
 
   ///
@@ -372,11 +421,15 @@ class Store<
       entry = _ActionEntry(this, dispatcher.name, actions, dispatcher);
       _actionMap[dispatcher.name] = entry;
     }
-    return entry.register<P>(
+    final sub = entry.register<P>(
         scope: currentController,
         dispatcher: dispatcher,
         handler: handler,
         mapper: (event) => Ok<P>(event.action.payload as P, event));
+
+    if (_subMixinStack.isNotEmpty) _subMixinStack.last.addSubscription(sub);
+
+    return sub;
   }
 
   ///
@@ -387,10 +440,14 @@ class Store<
       entry = _NestedEntry(this, actions.$name, actions);
       _nestedMap[actions.$name] = entry;
     }
-    return entry.register(
+    final sub = entry.register(
         scope: currentController,
         handler: handler,
         mapper: (event) => Ok(event.action.payload, event));
+
+    if (_subMixinStack.isNotEmpty) _subMixinStack.last.addSubscription(sub);
+
+    return sub;
   }
 
   _onError(e, stackTrace) {

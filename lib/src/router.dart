@@ -869,7 +869,7 @@ abstract class RouteDispatcher<
         predicateName: predicateName,
         transitionDuration: transitionDuration,
         timeout: timeout);
-    execute(Command.of(command, timeout: timeout?.inMilliseconds ?? null));
+    execute(Command.of(command, timeout: timeout));
   }
 
   @override

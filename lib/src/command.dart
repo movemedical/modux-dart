@@ -26,7 +26,8 @@ class IdGenerator {
 abstract class StandardCommandDispatcher<REQ, RESP,
         D extends CommandDispatcher<REQ, RESP, D>>
     extends CommandDispatcher<REQ, RESP, D> {
-  void call(REQ request, {String id = '', int timeout = 15000}) =>
+  void call(REQ request,
+          {String id = '', Duration timeout = const Duration(seconds: 30)}) =>
       $execute((CommandPayloadBuilder<REQ, RESP, D, Command<REQ>>()
             ..detached = false
             ..dispatcher = this as D
@@ -91,8 +92,6 @@ abstract class CommandDispatcher<Cmd, Result,
         Actions extends CommandDispatcher<Cmd, Result, Actions>>
     extends StatefulActions<CommandState<Cmd, Result>,
         CommandStateBuilder<Cmd, Result>, Actions> {
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $clear;
-
   ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $cancel;
 
   ActionDispatcher<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>
@@ -100,10 +99,6 @@ abstract class CommandDispatcher<Cmd, Result,
 
   ActionDispatcher<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
       get $result;
-
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $detach;
-
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $attach;
 
   ActionDispatcher<CommandPayload<Cmd, Result, Actions, CommandProgress>>
       get $progress;
@@ -131,15 +126,6 @@ abstract class CommandDispatcher<Cmd, Result,
   void $reducer(ReducerBuilder reducer) {
     super.$reducer(reducer);
     reducer.nest(this)
-      ..add($clear, (state, builder, action) {
-        if (builder == null) {
-          return;
-        }
-        builder.command = null;
-        builder.result = null;
-        builder.status = CommandStatus.idle;
-      })
-      ..add($detach, (s, b, a) {})
       ..add($cancel, (state, builder, action) {
         if (builder == null) return;
         builder?.status = CommandStatus.canceling;
@@ -214,19 +200,6 @@ abstract class CommandDispatcher<Cmd, Result,
         handler?.call(event, event?.value?.payload);
       });
 
-  StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onClear<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
-          [Function(ModuxEvent<CommandPayload<Cmd, Result, Actions, String>>,
-                  String)
-              handler]) =>
-      store.listen<CommandPayload<Cmd, Result, Actions, String>>($clear,
-          (event) {
-        handler?.call(event, event?.value?.payload);
-      });
-
   StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onCancel<
               State extends Built<State, StateBuilder>,
               StateBuilder extends Builder<State, StateBuilder>,
@@ -261,7 +234,6 @@ abstract class CommandDispatcher<Cmd, Result,
   void $middleware(MiddlewareBuilder builder) {
     super.$middleware(builder);
     builder.nest(this)
-      ..add($clear, middlewareClear)
       ..add($cancel, middlewareCancel)
       ..add($result, middlewareResult)
       ..add($execute, middlewareExecute)
@@ -275,7 +247,8 @@ abstract class CommandDispatcher<Cmd, Result,
             ..payload = payload)
           .build();
 
-  void send(Cmd request, {String id = '', int timeout = 15000}) =>
+  void send(Cmd request,
+          {String id = '', Duration timeout = const Duration(seconds: 15)}) =>
       $execute((CommandPayload<Cmd, Result, Actions, Command<Cmd>>(
           Command<Cmd>((b) => b
             ..id = id == null || id.isEmpty ? uuid.next() : id
@@ -284,14 +257,8 @@ abstract class CommandDispatcher<Cmd, Result,
           this)));
 
   ///
-  void clear([String id]) =>
-      $clear(CommandPayload<Cmd, Result, Actions, String>(id ?? '', this));
-
-  ///
   void cancel([String id]) =>
-      $clear(CommandPayload<Cmd, Result, Actions, String>(id ?? '', this));
-
-  void detach([String id]) => cancel(id);
+      $cancel(CommandPayload<Cmd, Result, Actions, String>(id ?? '', this));
 
   ///
   @protected
@@ -387,15 +354,19 @@ abstract class Command<REQ>
 
   REQ get payload;
 
-  int get timeout;
+  Duration get timeout;
 
   Type get payloadType => REQ;
+
+  bool get hasTimeout =>
+      timeout != null || timeout == Duration.zero || timeout.isNegative;
 
   Command._();
 
   factory Command([updates(CommandBuilder<REQ> b)]) = _$Command<REQ>;
 
-  factory Command.of(REQ payload, {String id = '', int timeout = 15000}) =>
+  factory Command.of(REQ payload,
+          {String id = '', Duration timeout = const Duration(seconds: 15)}) =>
       (CommandBuilder<REQ>()
             ..id = id == null || id.isEmpty ? uuid.next() : id
             ..timeout = timeout
@@ -655,8 +626,10 @@ abstract class CommandFuture<REQ, RESP,
   void startTimer() {
     if (completer.isCompleted) return;
     if (_timer != null) return;
-    if (command.timeout == null || command.timeout <= 0) return;
-    _timer = Timer(Duration(milliseconds: command.timeout), () => timedOut());
+    if (command.timeout == null ||
+        command.timeout == Duration.zero ||
+        command.timeout.isNegative) return;
+    _timer = Timer(command.timeout, () => timedOut());
   }
 
   void replaced() {
