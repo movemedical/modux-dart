@@ -167,67 +167,50 @@ abstract class CommandDispatcher<Cmd, Result,
   }
 
   StoreSubscription<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>
-      onExecute<
-                  State extends Built<State, StateBuilder>,
-                  StateBuilder extends Builder<State, StateBuilder>,
-                  StoreActions extends ModuxActions<State, StateBuilder,
-                      StoreActions>>(
-              Store<State, StateBuilder, StoreActions> store,
-              Function(
+      onExecute(
+              [Function(
                       ModuxEvent<
                           CommandPayload<Cmd, Result, Actions, Command<Cmd>>>,
                       Command<Cmd>)
-                  handler) =>
-          store.listen<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>(
-              $execute, (event) {
-            handler?.call(event, event?.value?.payload);
-          });
+                  handler]) =>
+          handler != null
+              ? $store.listen($execute,
+                  (event) => handler?.call(event, event?.value?.payload))
+              : $store.subscribe($execute);
 
-  StoreSubscription<
-      CommandPayload<Cmd, Result, Actions, CommandResult<Result>>> onResult<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
-          [Function(
-                  ModuxEvent<
-                      CommandPayload<Cmd, Result, Actions,
-                          CommandResult<Result>>>,
-                  CommandResult<Result>)
-              handler]) =>
-      store.listen<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>(
-          $result, (event) {
-        handler?.call(event, event?.value?.payload);
-      });
+  StoreSubscription<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
+      onResult(
+              [Function(
+                      ModuxEvent<
+                          CommandPayload<Cmd, Result, Actions,
+                              CommandResult<Result>>>,
+                      CommandResult<Result>)
+                  handler]) =>
+          handler != null
+              ? $store.listen($result,
+                  (event) => handler?.call(event, event?.value?.payload))
+              : $store.subscribe($result);
 
-  StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onCancel<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
+  StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onCancel(
           [Function(ModuxEvent<CommandPayload<Cmd, Result, Actions, String>>,
                   String)
               handler]) =>
-      store.listen<CommandPayload<Cmd, Result, Actions, String>>($cancel,
-          (event) {
-        handler?.call(event, event?.value?.payload);
-      });
+      handler != null
+          ? $store.listen(
+              $cancel, (event) => handler?.call(event, event?.value?.payload))
+          : $store.subscribe($cancel);
 
   StoreSubscription<
-      CommandPayload<Cmd, Result, Actions, CommandProgress>> onProgress<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              StoreActions extends ModuxActions<State, StateBuilder,
-                  StoreActions>>(Store<State, StateBuilder, StoreActions> store,
+      CommandPayload<Cmd, Result, Actions, CommandProgress>> onProgress(
           [Function(
                   ModuxEvent<
                       CommandPayload<Cmd, Result, Actions, CommandProgress>>,
                   CommandProgress)
               handler]) =>
-      store.listen<CommandPayload<Cmd, Result, Actions, CommandProgress>>(
-          $progress, (event) {
-        handler?.call(event, event?.value?.payload);
-      });
+      handler != null
+          ? $store.listen(
+              $progress, (event) => handler?.call(event, event?.value?.payload))
+          : $store.subscribe($progress);
 
   @override
   @mustCallSuper
@@ -247,8 +230,12 @@ abstract class CommandDispatcher<Cmd, Result,
             ..payload = payload)
           .build();
 
-  void send(Cmd request,
-          {String id = '', Duration timeout = const Duration(seconds: 15)}) =>
+  Future<CommandResult<Result>> future(Cmd request,
+      {String id = '', Duration timeout = Duration.zero}) {
+    return $store.execute(this, request, timeout: timeout);
+  }
+
+  void send(Cmd request, {String id = '', Duration timeout = Duration.zero}) =>
       $execute((CommandPayload<Cmd, Result, Actions, Command<Cmd>>(
           Command<Cmd>((b) => b
             ..id = id == null || id.isEmpty ? uuid.next() : id

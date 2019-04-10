@@ -3,9 +3,9 @@ import 'store.dart';
 
 import 'dart:collection';
 
-abstract class ReduxForm implements ReduxFormScope {}
+abstract class ModuxForm implements ReduxFormScope {}
 
-class ReduxFormImpl extends ReduxFormScopeImpl implements ReduxForm {}
+class ReduxFormImpl extends ReduxFormScopeImpl implements ModuxForm {}
 
 class ReduxFormScopeImpl implements ReduxFormScope {
   final _controls = LinkedHashMap<String, FormControl>();

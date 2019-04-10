@@ -92,13 +92,10 @@ class ActionDispatcher<P> extends ActionName<P> {
       return _countChars(n, '.');
   }
 
-  StoreSubject<P> listen<
-              State extends Built<State, StateBuilder>,
-              StateBuilder extends Builder<State, StateBuilder>,
-              Actions extends ModuxActions<State, StateBuilder, Actions>>(
-          Store<State, StateBuilder, Actions> store,
-          [Function(ModuxEvent<P>) handler]) =>
-      store.listen(this, handler);
+  StoreSubscription<P> listen([Function(ModuxEvent<P>) handler]) =>
+      parent?.store?.store?.listen(this, handler);
+
+  StoreSubscription<P> subscribe() => parent.store.store.subscribe(this);
 }
 
 ///

@@ -820,7 +820,7 @@ abstract class RouteDispatcher<
         .build();
   }
 
-  Future<CommandResult<RouteResult<Result>>> future(
+  Future<CommandResult<RouteResult<Result>>> call(
       {State state,
       StateBuilder Function(StateBuilder) builder,
       bool inflating = false,
@@ -849,27 +849,6 @@ abstract class RouteDispatcher<
         ResultBuilder,
         D>(this, request: command, timeout: timeout);
     return future;
-  }
-
-  void call(
-      {State state,
-      StateBuilder Function(StateBuilder) builder,
-      bool inflating = false,
-      RouteType routeType,
-      RouteCommandAction action,
-      String predicateName,
-      Duration transitionDuration,
-      Duration timeout = Duration.zero}) {
-    final command = create(
-        state: state,
-        builder: builder,
-        inflating: inflating,
-        routeType: routeType,
-        action: action,
-        predicateName: predicateName,
-        transitionDuration: transitionDuration,
-        timeout: timeout);
-    execute(Command.of(command, timeout: timeout));
   }
 
   @override

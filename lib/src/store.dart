@@ -17,6 +17,7 @@ import 'command.dart';
 import 'middleware.dart';
 import 'store_change.dart';
 import 'typedefs.dart';
+import 'service.dart';
 
 ///
 abstract class StoreService {
@@ -33,37 +34,43 @@ abstract class StoreService {
   void dispose();
 }
 
-mixin StoreSubscriptionsMixin {
-  final List<StoreSubscription> _subs = [];
+abstract class StoreSubscriptions {
+  void addSubscription(StoreSubscription s);
+
+  void removeSubscription(StoreSubscription s);
+
+  void disposeSubscriptions();
+}
+
+class StoreSubscriptionsImpl implements StoreSubscriptions {
+  bool _subsIsClosing = false;
+  final _subs = LinkedHashSet<StoreSubscription>();
 
   void addSubscription(StoreSubscription s) {
     _subs.add(s);
   }
 
+  void removeSubscription(StoreSubscription s) {
+    if (!_subsIsClosing) _subs.remove(s);
+  }
+
   void disposeSubscriptions() {
-    _subs?.forEach((s) => s.cancel());
-    _subs?.clear();
+    _subsIsClosing = true;
+    _subs.forEach((s) => s.cancel());
+    _subs.clear();
   }
 }
 
-abstract class AbstractStoreService<Self>
-    with StoreSubscriptionsMixin
-    implements StoreService {
-  AbstractStoreService(this.store);
+mixin StoreSubscriptionsMixin implements StoreSubscriptions {
+  final StoreSubscriptions _storeSubscriptions = StoreSubscriptionsImpl();
 
-  final Store store;
+  void addSubscription(StoreSubscription s) =>
+      _storeSubscriptions.addSubscription(s);
 
-  @override
-  Type get keyType => Self;
+  void disposeSubscriptions() => _storeSubscriptions.disposeSubscriptions();
 
-  @override
-  void init() {}
-
-  @override
-  @mustCallSuper
-  void dispose() {
-    disposeSubscriptions();
-  }
+  void removeSubscription(StoreSubscription s) =>
+      _storeSubscriptions.removeSubscription(s);
 }
 
 typedef Serializers SerializersFactory();
@@ -184,7 +191,7 @@ class Store<
         _services[service.runtimeType] = service;
       }
       _services[service.keyType] = service;
-      if (service is StoreSubscriptionsMixin) {
+      if (service is StoreSubscriptions) {
         _subMixinStack.add(service as StoreSubscriptionsMixin);
         try {
           service.init();
@@ -543,22 +550,20 @@ class ModuxController<
     LocalState extends Built<LocalState, LocalStateBuilder>,
     LocalStateBuilder extends Builder<LocalState, LocalStateBuilder>,
     LocalActions extends ModuxActions<LocalState, LocalStateBuilder,
-        LocalActions>> {
+        LocalActions>> with StoreSubscriptionsMixin {
   final LocalActions actions;
   final String name;
   final Store<State, StateBuilder, Actions> store;
-  final subscriptions = LinkedHashSet<StoreSubject>();
   final _props = LinkedHashMap();
-  ReduxForm _form;
-  int _refCount = 1;
+  ModuxForm _form;
 
   ModuxController(this.store, this.actions, this.name);
 
   bool get isActive => store._controllersMap[name] == this;
 
-  ReduxForm get form => _form;
+  ModuxForm get form => _form;
 
-  void registerForm(ReduxForm form) {
+  void registerForm(ModuxForm form) {
     _form = form;
   }
 
@@ -570,14 +575,7 @@ class ModuxController<
     } catch (e) {}
   }
 
-  int addRef() => _refCount++;
-
   void close() {
-    if (_refCount <= 0) return;
-
-    _refCount--;
-    if (_refCount > 0) return;
-
     _props?.clear();
 
     final current = store._controllersMap[name];
@@ -585,10 +583,7 @@ class ModuxController<
       store._controllersMap.remove(name);
     }
 
-    if (subscriptions.isNotEmpty)
-      List.of(subscriptions, growable: false).forEach((s) => s.cancel());
-
-    subscriptions.clear();
+    disposeSubscriptions();
   }
 }
 
@@ -625,7 +620,8 @@ abstract class _SubscriptionEntry {
     final sub = StoreSubject(scope, this, dispatcher, where, mapper, handler,
         timeout: timeout);
     subs.add(sub);
-    scope?.subscriptions?.add(sub);
+    scope?.addSubscription(sub);
+//    scope?.subscriptions?.add(sub);
     return sub;
   }
 
@@ -644,6 +640,7 @@ class _NestedEntry extends _SubscriptionEntry {
   void _unregister<T>(StoreSubject<T> sub) {
     subs.remove(sub);
     if (subs.isEmpty) store._nestedMap.remove(name);
+    sub.owner?.removeSubscription(sub);
   }
 }
 
@@ -657,6 +654,7 @@ class _ActionEntry extends _SubscriptionEntry {
   void _unregister<T>(StoreSubject<T> sub) {
     subs.remove(sub);
     if (subs.isEmpty) store._actionMap.remove(name);
+    sub.owner?.removeSubscription(sub);
   }
 }
 
@@ -690,7 +688,6 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
   final Duration duration;
 
   StreamSubscription _sub;
-//  Set<Subject<ModuxEvent<T>>> _subjects;
 
   StoreSubject._(
       this.owner,
