@@ -20,5 +20,5 @@ dev_dependencies:
   test: ^1.6.2
   mockito: ^4.0.0
   built_value_generator:
-    path: ../built-value-generator
-#    git: git://github.com/movemedical/built-value-generator
+#    path: ../built-value-generator
+    git: git://github.com/movemedical/built-value-generator
