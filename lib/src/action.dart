@@ -492,7 +492,10 @@ class StatefulActionsOptions<
         (a) => mapper(this.mapper(a)),
         (s) => localStateMapper(s),
         (s) => localStateMapper(this.stateMapper(s)), (app, b) {
-      replace?.call(this.builderMapper(app), b);
+      if (b != null && b is Built)
+        replace?.call(this.builderMapper(app), b.toBuilder());
+      else
+        replace?.call(this.builderMapper(app), b);
     });
   }
 

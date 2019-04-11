@@ -94,6 +94,8 @@ class MiddlewareBuilder<
   Middleware<State, StateBuilder, Actions> build() =>
       (MiddlewareApi<State, StateBuilder, Actions> api) =>
           (ActionHandler next) => (Action<dynamic> action) {
+                next(action);
+
                 map[action.name]
                     ?.forEach((handler) => handler?.call(api, next, action));
 //                if (handlers != null) {
@@ -102,8 +104,6 @@ class MiddlewareBuilder<
 //                  }
 //                  return;
 //                }
-
-                next(action);
               };
 }
 
