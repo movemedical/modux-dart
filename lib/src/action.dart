@@ -478,7 +478,7 @@ class StatefulActionsOptions<
         simpleName, name, this, mapper, (a) => mapper(this.mapper(a)));
   }
 
-  FieldDispatcher<P> actionField<P>(
+  FieldDispatcher<P> field<P>(
       String simpleName,
       FieldDispatcher<P> mapper(LocalActions),
       P localStateMapper(LocalState),
