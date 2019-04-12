@@ -116,7 +116,7 @@ class ReflectiveRouterRegistry implements RouterRegistry {
     final actionsByType = MapBuilder<Type, RouteActions>();
     final actionsByName = MapBuilder<String, RouteActions>();
 
-    store.actions.$forEachNested((n) {
+    store.actions.$visitNested((n) {
       if (n is RouteActions) {
         actionsByName[n.$name] = n;
         final existing = actionsByType[n.$actionsType];
@@ -133,7 +133,7 @@ class ReflectiveRouterRegistry implements RouterRegistry {
 
     final routesByName = MapBuilder<String, RouteDescriptor>();
     final routesByType = SetMultimapBuilder<Type, RouteDescriptor>();
-    store.actions.$forEachCommand(store, (owner, cmd) {
+    store.actions.$visitCommands((owner, cmd) {
       if (cmd is RouteDispatcher) {
         // Find toActions.
         final from = cmd.$mapParent(store.actions);
@@ -797,7 +797,7 @@ abstract class RouteDispatcher<
     }
 
     try {
-      if (!route.toActions.$ensureState($store, state)) {
+      if (!route.toActions.$ensureState(state)) {
         throw StateError(
             'Command state [${route.toActions.$name}] cannot be initialized. '
             'Parent state [${route.toActions.$options.parent.name}] is null');

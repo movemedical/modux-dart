@@ -1,5 +1,5 @@
-import 'package:built_value/built_value.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/built_value.dart';
 
 import 'action.dart';
 import 'store.dart';
@@ -51,6 +51,7 @@ class MiddlewareBuilder<
 
   BuiltListMultimap<String,
       MiddlewareHandler<State, StateBuilder, Actions, dynamic>> _mapBuilt;
+
   BuiltListMultimap<String,
           MiddlewareHandler<State, StateBuilder, Actions, dynamic>>
       get map => _mapBuilt ??= _map.build();

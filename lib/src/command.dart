@@ -112,7 +112,7 @@ abstract class CommandDispatcher<Cmd, Result,
   void execute(Command<Cmd> command) {
     final payload = payloadOf<Command<Cmd>>(command);
     try {
-      if (!$ensureState($store)) {
+      if (!$ensureState()) {
         throw StateError('Command state [${$name}] cannot be initialized. '
             'Parent state [${$options.parent.name}] is null');
       }

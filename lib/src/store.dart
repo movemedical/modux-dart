@@ -114,7 +114,9 @@ class Store<
     Function(Store<State, StateBuilder, Actions> store,
             Function(StoreService service) register)
         serviceFactory,
-  }) : logger = Logger('Store') {
+  }) : logger = Logger('ModuxStore') {
+    // Set store reference on root Action Options which allows any
+    // Actions or Dispatchers in the graph to use.
     actions.$options.store.store = this;
 
     _subscription = _actionsController.stream

@@ -267,14 +267,21 @@ abstract class ModuxActions<
               StoreActions>>() =>
       $store as Store<State, StateBuilder, StoreActions>;
 
-  void $forEachCommand(
-      Store store, void fn(ModuxActions owner, CommandDispatcher a)) {
-    $forEachNested((actions) {
+  void $visitCommands(void fn(ModuxActions owner, CommandDispatcher a)) {
+    $visitNested((actions) {
       if (actions is CommandDispatcher)
-        fn(actions.$mapParent(store.actions), actions);
+        fn(actions.$mapParent($store.actions), actions);
     });
   }
 
+  void $visitNested(Function(ModuxActions a) callback) {
+    $nested?.forEach((actions) {
+      actions.$visitNested(callback);
+      callback(actions);
+    });
+  }
+
+  @deprecated
   void $forEachNested(Function(ModuxActions a) fn) {
     $nested?.forEach((actions) {
       actions.$forEachNested(fn);
@@ -316,6 +323,8 @@ abstract class ModuxActions<
 
   FullType get $fullType => null;
 
+  LocalState get $state => $mapState($store.state);
+
   StoreSubject $listen<
               State extends Built<State, StateBuilder>,
               StateBuilder extends Builder<State, StateBuilder>,
@@ -325,7 +334,11 @@ abstract class ModuxActions<
       store.nestedStream(this, handler);
 
   bool $isAncestor<T>(ModuxEvent<T> event) =>
-      event.event.name.startsWith($name);
+      event.event.name.startsWith($name) || $name.startsWith(event.event.name);
+
+  bool $isParent<T>(ModuxEvent<T> event) => $name.startsWith(event.event.name);
+
+  bool $isChild<T>(ModuxEvent<T> event) => event.event.name.startsWith($name);
 
   LocalState $mapState(Built<dynamic, dynamic> appState) =>
       $options.stateMapper(appState);
@@ -383,8 +396,6 @@ abstract class StatefulActions<
   @override
   bool get $isStateful => true;
 
-  LocalState get $state => $mapState($store.state);
-
   void $reset([LocalState state]) {
     $replace(state ?? $initial);
   }
@@ -412,7 +423,11 @@ abstract class StatefulActions<
       ActionHandler next,
       Action<LocalState> action) {}
 
-  bool $ensureState(Store store, [LocalState state]) {
+  /// Ensures the parent state hierarchy is initialized. If not it attempts
+  /// to initialize as far up as needed. This automatically builds all
+  /// parent state so this LocalState may exist in the State Graph.
+  bool $ensureState([LocalState state]) {
+    final store = $store;
     dynamic current = $mapState(store.state);
     if (current != null) {
       if (this is StatefulActions && state != null) {
@@ -433,7 +448,7 @@ abstract class StatefulActions<
     }
     var parentState = parent.$mapState(store.state);
     if (parentState == null) {
-      (parent as StatefulActions).$ensureState(store);
+      (parent as StatefulActions).$ensureState();
     }
 
     parentState = parent.$mapState(store.state);
@@ -600,6 +615,9 @@ abstract class StatelessActions<
 
   @override
   bool get $isStateless => true;
+
+  @override
+  Empty get $state => Empty();
 }
 
 /// [ActionName] is an object that simply contains the action name but is
