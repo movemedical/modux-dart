@@ -6,25 +6,25 @@ part of 'action.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-Serializer<Empty> _$emptySerializer = new _$EmptySerializer();
+Serializer<Nothing> _$nothingSerializer = new _$NothingSerializer();
 Serializer<Value> _$valueSerializer = new _$ValueSerializer();
 
-class _$EmptySerializer implements StructuredSerializer<Empty> {
+class _$NothingSerializer implements StructuredSerializer<Nothing> {
   @override
-  final Iterable<Type> types = const [Empty, _$Empty];
+  final Iterable<Type> types = const [Nothing, _$Nothing];
   @override
-  final String wireName = 'modux/src/Empty';
+  final String wireName = 'modux/src/Nothing';
 
   @override
-  Iterable serialize(Serializers serializers, Empty object,
+  Iterable serialize(Serializers serializers, Nothing object,
       {FullType specifiedType = FullType.unspecified}) {
     return <Object>[];
   }
 
   @override
-  Empty deserialize(Serializers serializers, Iterable serialized,
+  Nothing deserialize(Serializers serializers, Iterable serialized,
       {FullType specifiedType = FullType.unspecified}) {
-    return new EmptyBuilder().build();
+    return new NothingBuilder().build();
   }
 }
 
@@ -81,57 +81,57 @@ class _$ValueSerializer implements StructuredSerializer<Value> {
   }
 }
 
-class _$Empty extends Empty {
-  factory _$Empty([void updates(EmptyBuilder b)]) =>
-      (new EmptyBuilder()..update(updates)).build();
+class _$Nothing extends Nothing {
+  factory _$Nothing([void updates(NothingBuilder b)]) =>
+      (new NothingBuilder()..update(updates)).build();
 
-  _$Empty._() : super._();
+  _$Nothing._() : super._();
 
   @override
-  Empty rebuild(void updates(EmptyBuilder b)) =>
+  Nothing rebuild(void updates(NothingBuilder b)) =>
       (toBuilder()..update(updates)).build();
 
   @override
-  EmptyBuilder toBuilder() => new EmptyBuilder()..replace(this);
+  NothingBuilder toBuilder() => new NothingBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is Empty;
+    return other is Nothing;
   }
 
   @override
   int get hashCode {
-    return 634538651;
+    return 766531449;
   }
 
   @override
   String toString() {
-    return newBuiltValueToStringHelper('Empty').toString();
+    return newBuiltValueToStringHelper('Nothing').toString();
   }
 }
 
-class EmptyBuilder implements Builder<Empty, EmptyBuilder> {
-  _$Empty _$v;
+class NothingBuilder implements Builder<Nothing, NothingBuilder> {
+  _$Nothing _$v;
 
-  EmptyBuilder();
+  NothingBuilder();
 
   @override
-  void replace(Empty other) {
+  void replace(Nothing other) {
     if (other == null) {
       throw new ArgumentError.notNull('other');
     }
-    _$v = other as _$Empty;
+    _$v = other as _$Nothing;
   }
 
   @override
-  void update(void updates(EmptyBuilder b)) {
+  void update(void updates(NothingBuilder b)) {
     if (updates != null) updates(this);
   }
 
   @override
-  _$Empty build() {
-    final _$result = _$v ?? new _$Empty._();
+  _$Nothing build() {
+    final _$result = _$v ?? new _$Nothing._();
     replace(_$result);
     return _$result;
   }

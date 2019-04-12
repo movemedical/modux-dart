@@ -567,12 +567,12 @@ abstract class ModelActions<
             LocalActions>>
     extends StatefulActions<LocalState, LocalStateBuilder, LocalActions> {}
 
-abstract class Empty implements Built<Empty, EmptyBuilder> {
-  Empty._();
+abstract class Nothing implements Built<Nothing, NothingBuilder> {
+  Nothing._();
 
-  factory Empty([updates(EmptyBuilder b)]) = _$Empty;
+  factory Nothing([updates(NothingBuilder b)]) = _$Nothing;
 
-  static Serializer<Empty> get serializer => _$emptySerializer;
+  static Serializer<Nothing> get serializer => _$nothingSerializer;
 }
 
 abstract class Value<T> implements Built<Value<T>, ValueBuilder<T>> {
@@ -587,8 +587,8 @@ abstract class Value<T> implements Built<Value<T>, ValueBuilder<T>> {
 
 @immutable
 class StatelessActionsOptions<
-        Actions extends ModuxActions<Empty, EmptyBuilder, Actions>>
-    extends StatefulActionsOptions<Empty, EmptyBuilder, Actions> {
+        Actions extends ModuxActions<Nothing, NothingBuilder, Actions>>
+    extends StatefulActionsOptions<Nothing, NothingBuilder, Actions> {
   StatelessActionsOptions(
       StatefulActionsOptions parent,
       String name,
@@ -597,18 +597,18 @@ class StatelessActionsOptions<
       ModuxActions Function(ModuxActions) parentMapper,
       Actions Function(ModuxActions) mapper)
       : super(parent, name, simpleName, dispatcher, parentMapper, mapper,
-            (s) => Empty(), (b) => EmptyBuilder(), (parent, builder) {});
+            (s) => Nothing(), (b) => NothingBuilder(), (parent, builder) {});
 }
 
 ///
 abstract class StatelessActions<
-        Actions extends ModuxActions<Empty, EmptyBuilder, Actions>>
-    extends ModuxActions<Empty, EmptyBuilder, Actions> {
+        Actions extends ModuxActions<Nothing, NothingBuilder, Actions>>
+    extends ModuxActions<Nothing, NothingBuilder, Actions> {
   @override
-  Empty get $initial => Empty();
+  Nothing get $initial => Nothing();
 
   @override
-  EmptyBuilder $newBuilder() => EmptyBuilder();
+  NothingBuilder $newBuilder() => NothingBuilder();
 
   @override
   bool get $isStateful => false;
@@ -617,7 +617,7 @@ abstract class StatelessActions<
   bool get $isStateless => true;
 
   @override
-  Empty get $state => Empty();
+  Nothing get $state => Nothing();
 }
 
 /// [ActionName] is an object that simply contains the action name but is
