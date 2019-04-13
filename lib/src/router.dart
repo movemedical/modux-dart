@@ -559,9 +559,7 @@ abstract class RouteActions<
     Result extends Built<Result, ResultBuilder>,
     ResultBuilder extends Builder<Result, ResultBuilder>,
     Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
-        Actions, Route>,
-    Route extends RouteDispatcher<State, StateBuilder, Result, ResultBuilder,
-        Actions, Route>> extends StatefulActions<State, StateBuilder, Actions> {
+        Actions>> extends StatefulActions<State, StateBuilder, Actions> {
   bool get $isDialog => false;
 
   RouteType get $routeType => RouteType.page;
@@ -574,9 +572,11 @@ abstract class RouteActions<
 
   ActionDispatcher<Result> get $popping;
 
-  RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, Route>
+  RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, dynamic>
       get future =>
-          $store.service<RouterService>().activeRouteByType(Actions)?.future;
+          $store.service<RouterService>().activeRouteByType(Actions)?.future
+              as RouteFuture<State, StateBuilder, Result, ResultBuilder,
+                  Actions, dynamic>;
 
   RouterService get $router => $store.service<RouterService>();
 
@@ -756,7 +756,7 @@ abstract class RouteDispatcher<
     Result extends Built<Result, ResultBuilder>,
     ResultBuilder extends Builder<Result, ResultBuilder>,
     Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
-        Actions, D>,
+        Actions>,
     D extends RouteDispatcher<State, StateBuilder, Result, ResultBuilder,
         Actions, D>> extends NestedBuiltCommandDispatcher<
     RouteCommand<State>,
@@ -876,7 +876,7 @@ class RouteFuture<
     Result extends Built<Result, ResultBuilder>,
     ResultBuilder extends Builder<Result, ResultBuilder>,
     Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
-        Actions, D>,
+        Actions>,
     D extends RouteDispatcher<
         State,
         StateBuilder,
