@@ -454,7 +454,8 @@ class RouterService implements StoreService, RouterRegistry {
             (a) => a.descriptor.toActions?.$actionsType == toActionsType,
             orElse: () => null) !=
         null) {
-      future.cancel('already exists');
+//      future.cancel('already exists');
+      future.cancel();
       return;
     }
 
@@ -467,7 +468,8 @@ class RouterService implements StoreService, RouterRegistry {
     }
 
     if (platform == null) {
-      future.cancel('createRoute() returned null');
+//      future.cancel('createRoute() returned null');
+      future.cancel();
       return;
     }
 
@@ -820,7 +822,7 @@ abstract class RouteDispatcher<
         .build();
   }
 
-  Future<CommandResult<RouteResult<Result>>> call(
+  RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, D> call(
       {State state,
       StateBuilder Function(StateBuilder) builder,
       bool inflating = false,

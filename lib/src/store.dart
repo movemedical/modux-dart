@@ -90,7 +90,8 @@ class Store<
   final StreamController<ActionEvent> _actionsController =
       StreamController.broadcast();
   final _services = LinkedHashMap<Type, dynamic>();
-  final _commandFutures = LinkedHashMap<String, CommandFutures>();
+  final _dispatcherFutures = LinkedHashMap<String, DispatcherFutures>();
+  final _futureMap = Map<String, CommandFuture>();
   final _actionMap = LinkedHashMap<String, _ActionEntry>();
   final _nestedMap = LinkedHashMap<String, _NestedEntry>();
   final _controllersMap = LinkedHashMap<String, ModuxController>();
@@ -225,26 +226,21 @@ class Store<
               final command = commandPayload.payload;
               final dispatcher = commandPayload.dispatcher;
 
-              CommandFutures futures = _commandFutures[dispatcher.$name];
+              DispatcherFutures futures = _dispatcherFutures[dispatcher.$name];
 
               if (futures == null) {
-                futures = CommandFutures(this, dispatcher);
-                _commandFutures[dispatcher.$name] = futures;
+                return;
               }
 
-              if (dispatcher.$execute.name == action.name) {
-                if (command != null && command is Command) {
-                  final future = futures.newFuture(commandPayload);
-                  if (future == null) {
-                    throw 'Command [$command].newFuture() returned null';
-                  }
-                }
-              } else if (dispatcher.$cancel.name == action.name) {
-                final future =
+              if (dispatcher.$cancel.name == action.name) {
+                CommandFuture future =
                     futures.futures[action.payload?.toString() ?? ''];
 
                 if (future != null) {
-                  future.cancel();
+                  future.receivedCancel();
+                } else {
+                  future = _futureMap[action.payload?.toString()];
+                  future?.receivedCancel();
                 }
               }
             }
@@ -307,20 +303,47 @@ class Store<
           bool where(Action<P> action)}) async =>
       listen(action, null).toFuture(timeout);
 
-  /// Execute a Command.
-  Future<CommandResult<RESP>>
-      executeCommand<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
-          D dispatcher, Command<REQ> command) async {
-    dispatcher.execute(command);
-    final state = dispatcher.$mapState(_state);
-    if (state == null) return Future.error('Command is null');
-    if (state.isCompleted) return Future.value(state.result);
+  DispatcherFutures<REQ, RESP, D>
+      futuresOf<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
+              D dispatcher) =>
+          _dispatcherFutures[dispatcher.$name];
 
-    return (await actionFuture(dispatcher.$result))?.value?.payload;
+  /// Execute a Command.
+  CommandFuture<REQ, RESP, D>
+      executeCommand<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
+          D dispatcher, Command<REQ> command) {
+    final future = dispatcher.newFuture(command);
+
+    final name = dispatcher.$name;
+    DispatcherFutures futures = _dispatcherFutures[name];
+
+    if (futures == null) {
+      futures = DispatcherFutures<REQ, RESP, D>(
+          name, this, _dispatcherFutures, _futureMap, dispatcher);
+      _dispatcherFutures[dispatcher.$name] = futures;
+    }
+
+    final existing = _futureMap[future.uid];
+    futures.register(future);
+
+    if (existing != null) {
+      existing.cancel();
+    }
+
+    _futureMap[future.uid] = future;
+
+    dispatcher.execute(command);
+
+    future.start();
+//    final state = dispatcher.$mapState(_state);
+//    if (state == null) return Future.error('Command is null');
+//    if (state.isCompleted) return Future.value(state.result);
+
+    return future;
   }
 
   /// Execute a Command.
-  Future<CommandResult<Result>>
+  CommandFuture<Cmd, Result, Actions>
       executeBuilt<
               Cmd extends Built<Cmd, CmdBuilder>,
               CmdBuilder extends Builder<Cmd, CmdBuilder>,
@@ -344,35 +367,26 @@ class Store<
           {Cmd request,
           void builder(CmdBuilder b),
           Duration timeout = const Duration(seconds: 30),
-          String id = ''}) async {
-    dispatcher.execute(Command<Cmd>((b) => b
-      ..id = id == null || id.isEmpty ? uuid.next() : id
-      ..payload = request
-      ..timeout = timeout));
-
-    final state = dispatcher.$mapState(_state);
-    if (state == null) return Future.error('Command is null');
-    if (state.isCompleted) return Future.value(state.result);
-
-    return (await actionFuture(dispatcher.$result))?.value?.payload;
+          String id = ''}) {
+    return executeCommand(
+        dispatcher,
+        Command<Cmd>((b) => b
+          ..id = id == null || id.isEmpty ? uuid.next() : id
+          ..payload = request
+          ..timeout = timeout));
   }
 
   /// Execute a Command.
-  Future<CommandResult<RESP>>
+  CommandFuture<REQ, RESP, D>
       execute<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
           D dispatcher, REQ request,
-          {Duration timeout = const Duration(seconds: 30),
-          String id = ''}) async {
-    dispatcher.execute(Command<REQ>((b) => b
-      ..id = id == null || id.isEmpty ? uuid.next() : id
-      ..payload = request
-      ..timeout = timeout));
-
-    final state = dispatcher.$mapState(_state);
-    if (state == null) return Future.error('Command is null');
-    if (state.isCompleted) return Future.value(state.result);
-
-    return (await actionFuture(dispatcher.$result))?.value?.payload;
+          {Duration timeout = const Duration(seconds: 30), String id = ''}) {
+    return executeCommand(
+        dispatcher,
+        Command<REQ>((b) => b
+          ..id = id == null || id.isEmpty ? uuid.next() : id
+          ..payload = request
+          ..timeout = timeout));
   }
 
   ///

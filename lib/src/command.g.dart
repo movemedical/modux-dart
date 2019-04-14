@@ -92,6 +92,8 @@ class _$CommandSerializer implements StructuredSerializer<Command> {
         isUnderspecified ? FullType.object : specifiedType.parameters[0];
 
     final result = <Object>[
+      'uid',
+      serializers.serialize(object.uid, specifiedType: const FullType(String)),
       'id',
       serializers.serialize(object.id, specifiedType: const FullType(String)),
       'payload',
@@ -123,6 +125,10 @@ class _$CommandSerializer implements StructuredSerializer<Command> {
       iterator.moveNext();
       final dynamic value = iterator.current;
       switch (key) {
+        case 'uid':
+          result.uid = serializers.deserialize(value,
+              specifiedType: const FullType(String)) as String;
+          break;
         case 'id':
           result.id = serializers.deserialize(value,
               specifiedType: const FullType(String)) as String;
@@ -395,12 +401,15 @@ class _$CommandPayload<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>, P>
   final P payload;
   @override
   final D dispatcher;
+  @override
+  final CommandFuture<dynamic, dynamic, CommandDispatcher> future;
 
   factory _$CommandPayload(
           [void updates(CommandPayloadBuilder<REQ, RESP, D, P> b)]) =>
       (new CommandPayloadBuilder<REQ, RESP, D, P>()..update(updates)).build();
 
-  _$CommandPayload._({this.detached, this.payload, this.dispatcher})
+  _$CommandPayload._(
+      {this.detached, this.payload, this.dispatcher, this.future})
       : super._() {
     if (payload == null) {
       throw new BuiltValueNullFieldError('CommandPayload', 'payload');
@@ -437,13 +446,16 @@ class _$CommandPayload<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>, P>
     return other is CommandPayload &&
         detached == other.detached &&
         payload == other.payload &&
-        dispatcher == other.dispatcher;
+        dispatcher == other.dispatcher &&
+        future == other.future;
   }
 
   @override
   int get hashCode {
     return $jf($jc(
-        $jc($jc(0, detached.hashCode), payload.hashCode), dispatcher.hashCode));
+        $jc($jc($jc(0, detached.hashCode), payload.hashCode),
+            dispatcher.hashCode),
+        future.hashCode));
   }
 
   @override
@@ -451,7 +463,8 @@ class _$CommandPayload<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>, P>
     return (newBuiltValueToStringHelper('CommandPayload')
           ..add('detached', detached)
           ..add('payload', payload)
-          ..add('dispatcher', dispatcher))
+          ..add('dispatcher', dispatcher)
+          ..add('future', future))
         .toString();
   }
 }
@@ -475,6 +488,12 @@ class CommandPayloadBuilder<REQ, RESP,
   D get dispatcher => _$this._dispatcher;
   set dispatcher(D dispatcher) => _$this._dispatcher = dispatcher;
 
+  CommandFuture<dynamic, dynamic, CommandDispatcher> _future;
+  CommandFuture<dynamic, dynamic, CommandDispatcher> get future =>
+      _$this._future;
+  set future(CommandFuture<dynamic, dynamic, CommandDispatcher> future) =>
+      _$this._future = future;
+
   CommandPayloadBuilder();
 
   CommandPayloadBuilder<REQ, RESP, D, P> get _$this {
@@ -482,6 +501,7 @@ class CommandPayloadBuilder<REQ, RESP,
       _detached = _$v.detached;
       _payload = _$v.payload;
       _dispatcher = _$v.dispatcher;
+      _future = _$v.future;
       _$v = null;
     }
     return this;
@@ -504,13 +524,18 @@ class CommandPayloadBuilder<REQ, RESP,
   _$CommandPayload<REQ, RESP, D, P> build() {
     final _$result = _$v ??
         new _$CommandPayload<REQ, RESP, D, P>._(
-            detached: detached, payload: payload, dispatcher: dispatcher);
+            detached: detached,
+            payload: payload,
+            dispatcher: dispatcher,
+            future: future);
     replace(_$result);
     return _$result;
   }
 }
 
 class _$Command<REQ> extends Command<REQ> {
+  @override
+  final String uid;
   @override
   final String id;
   @override
@@ -521,7 +546,10 @@ class _$Command<REQ> extends Command<REQ> {
   factory _$Command([void updates(CommandBuilder<REQ> b)]) =>
       (new CommandBuilder<REQ>()..update(updates)).build();
 
-  _$Command._({this.id, this.payload, this.timeout}) : super._() {
+  _$Command._({this.uid, this.id, this.payload, this.timeout}) : super._() {
+    if (uid == null) {
+      throw new BuiltValueNullFieldError('Command', 'uid');
+    }
     if (id == null) {
       throw new BuiltValueNullFieldError('Command', 'id');
     }
@@ -547,6 +575,7 @@ class _$Command<REQ> extends Command<REQ> {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is Command &&
+        uid == other.uid &&
         id == other.id &&
         payload == other.payload &&
         timeout == other.timeout;
@@ -554,13 +583,15 @@ class _$Command<REQ> extends Command<REQ> {
 
   @override
   int get hashCode {
-    return $jf(
-        $jc($jc($jc(0, id.hashCode), payload.hashCode), timeout.hashCode));
+    return $jf($jc(
+        $jc($jc($jc(0, uid.hashCode), id.hashCode), payload.hashCode),
+        timeout.hashCode));
   }
 
   @override
   String toString() {
     return (newBuiltValueToStringHelper('Command')
+          ..add('uid', uid)
           ..add('id', id)
           ..add('payload', payload)
           ..add('timeout', timeout))
@@ -571,6 +602,10 @@ class _$Command<REQ> extends Command<REQ> {
 class CommandBuilder<REQ>
     implements Builder<Command<REQ>, CommandBuilder<REQ>> {
   _$Command<REQ> _$v;
+
+  String _uid;
+  String get uid => _$this._uid;
+  set uid(String uid) => _$this._uid = uid;
 
   String _id;
   String get id => _$this._id;
@@ -588,6 +623,7 @@ class CommandBuilder<REQ>
 
   CommandBuilder<REQ> get _$this {
     if (_$v != null) {
+      _uid = _$v.uid;
       _id = _$v.id;
       _payload = _$v.payload;
       _timeout = _$v.timeout;
@@ -611,8 +647,9 @@ class CommandBuilder<REQ>
 
   @override
   _$Command<REQ> build() {
-    final _$result =
-        _$v ?? new _$Command<REQ>._(id: id, payload: payload, timeout: timeout);
+    final _$result = _$v ??
+        new _$Command<REQ>._(
+            uid: uid, id: id, payload: payload, timeout: timeout);
     replace(_$result);
     return _$result;
   }

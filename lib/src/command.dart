@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
@@ -121,6 +122,8 @@ abstract class CommandDispatcher<Cmd, Result,
     }
     $execute(payload);
   }
+
+  DispatcherFutures<Cmd, Result, Actions> get futures => $store.futuresOf(this);
 
   @override
   void $reducer(ReducerBuilder reducer) {
@@ -317,6 +320,9 @@ abstract class CommandPayload<REQ, RESP,
 
   D get dispatcher;
 
+  @nullable
+  CommandFuture get future;
+
   Type get requestType => REQ;
 
   Type get responseType => RESP;
@@ -337,6 +343,8 @@ abstract class Command<REQ>
     implements Built<Command<REQ>, CommandBuilder<REQ>> {
   static Serializer<Command> get serializer => _$commandSerializer;
 
+  String get uid;
+
   String get id;
 
   REQ get payload;
@@ -350,11 +358,15 @@ abstract class Command<REQ>
 
   Command._();
 
-  factory Command([updates(CommandBuilder<REQ> b)]) = _$Command<REQ>;
+  factory Command([updates(CommandBuilder<REQ> b)]) => _$Command<REQ>((b) {
+        updates?.call(b);
+        b..uid = uuid.next();
+      });
 
   factory Command.of(REQ payload,
-          {String id = '', Duration timeout = const Duration(seconds: 15)}) =>
+          {String id = '', Duration timeout = Duration.zero}) =>
       (CommandBuilder<REQ>()
+            ..uid = uuid.next()
             ..id = id == null || id.isEmpty ? uuid.next() : id
             ..timeout = timeout
             ..payload = payload)
@@ -522,60 +534,73 @@ abstract class CommandState<REQ, RESP>
   }
 }
 
-class CommandFutures {
+///
+class DispatcherFutures<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>> {
+  DispatcherFutures(
+      this.key, this.store, this.storeMap, this.storeFutures, this.dispatcher);
+
+  final String key;
   final Store store;
+  final LinkedHashMap<String, DispatcherFutures> storeMap;
+  final LinkedHashMap<String, CommandFuture> storeFutures;
   final CommandDispatcher dispatcher;
-  final Map<String, CommandFuture> futures = {};
+  final futures = LinkedHashMap<String, CommandFuture<REQ, RESP, D>>();
 
-  CommandFutures(this.store, this.dispatcher);
+  bool get isEmpty => futures.isEmpty;
 
-  CommandFuture newFuture(CommandPayload payload) {
-    final id = payload?.payload?.id ?? '';
-    final future = dispatcher.newFuture(payload.payload);
+  void keepNewest(int size) {
+    if (futures.length <= size) return;
+    var count = futures.length - size;
+    final iterator = futures.values.iterator;
+    while (iterator.moveNext() && count > 0) {
+      iterator.current.cancel();
+      count--;
+    }
+  }
 
-    if (future == null)
-      throw StateError('CommandDispatcher '
-          '[${dispatcher.$name}] '
-          'of Type [${dispatcher.$actionsType}] '
-          'newFuture() returned null');
-
-    // Set owner.
-    future._owner = this;
-
-    // Replace existing if necessary.
-    futures[id]?.replaced();
-    futures[id] = future;
-
-    // Start Future.
-    future.start();
-
-    return future;
+  void register(CommandFuture<REQ, RESP, D> future) {
+    if (future.command?.id != null)
+      futures.remove(future.command.id)?.replaced();
+    futures[future.command.id] = future;
   }
 
   void cancelAll() => futures.values.toList().forEach((f) => f.cancel());
 
-  void cancelAllExcept(CommandFuture future) => futures.values
+  void cancelAllExcept(CommandFuture<REQ, RESP, D> future) => futures.values
       .where((f) => f != future)
       .toList()
       .forEach((f) => f.cancel());
 
-  _remove(CommandFuture future) {
+  void _remove(CommandFuture<REQ, RESP, D> future) {
     final existing = futures[future.id];
     if (existing == future) {
       futures.remove(future.id);
     }
+    storeFutures.remove(future.uid);
+    if (futures.isEmpty) {
+      storeMap.remove(key);
+    }
   }
+}
+
+abstract class CancelableFuture<T> implements Future<T> {
+  void cancel();
 }
 
 /// Future that handles the lifecycle of a Command.
 /// This must be extended by the custom Command middleware.
 abstract class CommandFuture<REQ, RESP,
-    D extends CommandDispatcher<REQ, RESP, D>> {
+        D extends CommandDispatcher<REQ, RESP, D>>
+    implements CancelableFuture<CommandResult<RESP>> {
+  final String uid = uuid.next();
   final D dispatcher;
   final DateTime started = DateTime.now();
   final Completer<CommandResult<RESP>> completer = Completer();
   final Command<REQ> command;
-  CommandFutures _owner;
+  DispatcherFutures _owner;
+  bool _cancelDispatched = false;
+  bool _canceling = false;
+  bool _disposed = false;
 
   Timer _timer;
 
@@ -584,7 +609,7 @@ abstract class CommandFuture<REQ, RESP,
 
   String get id => command?.id ?? '';
 
-  CommandFutures get owner => _owner;
+  DispatcherFutures get owner => _owner;
 
   Future<CommandResult<RESP>> get future => completer.future;
 
@@ -600,7 +625,20 @@ abstract class CommandFuture<REQ, RESP,
 
   T storeService<T>() => dispatcher.$store.service<T>();
 
-  CommandFuture(this.dispatcher, this.command);
+  CommandFuture(this.dispatcher, this.command) {
+    completer.future.then((result) {
+      try {
+        _owner?._remove(this);
+      } catch (e) {}
+      try {
+        done(result);
+      } finally {
+        if (_disposed) return;
+        _disposed = true;
+        dispose();
+      }
+    });
+  }
 
   @mustCallSuper
   void start() {
@@ -623,8 +661,31 @@ abstract class CommandFuture<REQ, RESP,
     complete(CommandResultCode.canceled, message: 'replaced');
   }
 
-  void cancel([String msg]) {
-    complete(CommandResultCode.canceled, message: msg);
+  void receivedCancel() {
+    _cancelDispatched = true;
+    if (_canceling) return;
+    cancel();
+  }
+
+  void notifyCancel() {
+    dispatcher?.cancel(id);
+  }
+
+  void cancel() {
+    if (_canceling) return;
+    _canceling = true;
+    if (!_cancelDispatched) {
+      try {
+        _cancelDispatched = true;
+        notifyCancel();
+      } catch (e) {}
+    }
+    executeCancel();
+  }
+
+  @protected
+  void executeCancel() {
+    complete(CommandResultCode.canceled);
   }
 
   void timedOut() {
@@ -646,35 +707,48 @@ abstract class CommandFuture<REQ, RESP,
 
   void completeResult(CommandResult<RESP> result) {
     if (isCompleted) return;
-    try {
-      _timer?.cancel();
-      _timer = null;
-      completer.complete(result);
-    } catch (e) {
-      // Ignore.
-    } finally {
-      try {
-        if (!_detached) {
-          dispatcher.$result(CommandPayload<REQ, RESP, D, CommandResult<RESP>>(
-              result, dispatcher));
-        }
-      } catch (e) {}
-      try {
-        _owner?._remove(this);
-      } catch (e) {}
 
-      try {
-        done(result);
-      } finally {
-        dispose();
+    _timer?.cancel();
+    _timer = null;
+
+    try {
+      if (!_detached) {
+        dispatcher.$result(CommandPayload<REQ, RESP, D, CommandResult<RESP>>(
+            result, dispatcher));
       }
-    }
+    } catch (e) {}
+
+    try {
+      completer.complete(result);
+    } catch (e) {}
   }
 
   @protected
   void done(CommandResult<RESP> result) {}
 
   void dispose() {}
+
+  @override
+  Future<CommandResult<RESP>> timeout(Duration timeLimit,
+          {FutureOr<CommandResult<RESP>> onTimeout()}) =>
+      completer.future.timeout(timeLimit, onTimeout: onTimeout);
+
+  @override
+  Stream<CommandResult<RESP>> asStream() => completer.future.asStream();
+
+  @override
+  Future<CommandResult<RESP>> whenComplete(FutureOr action()) =>
+      completer.future.whenComplete(action);
+
+  @override
+  Future<CommandResult<RESP>> catchError(Function onError,
+          {bool test(bool test(Object error))}) =>
+      completer.future.catchError(onError, test: test);
+
+  @override
+  Future<R> then<R>(FutureOr<R> onValue(CommandResult<RESP> value),
+          {Function onError}) =>
+      completer.future.then<R>(onValue);
 }
 
 abstract class CommandStreamFuture<REQ, RESP,
