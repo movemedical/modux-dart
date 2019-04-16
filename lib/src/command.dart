@@ -535,7 +535,8 @@ abstract class CommandState<REQ, RESP>
 }
 
 ///
-class DispatcherFutures<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>> {
+class DispatcherFutures<Req, Resp,
+    Actions extends CommandDispatcher<Req, Resp, Actions>> {
   DispatcherFutures(
       this.key, this.store, this.storeMap, this.storeFutures, this.dispatcher);
 
@@ -544,7 +545,7 @@ class DispatcherFutures<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>> {
   final LinkedHashMap<String, DispatcherFutures> storeMap;
   final LinkedHashMap<String, CommandFuture> storeFutures;
   final CommandDispatcher dispatcher;
-  final futures = LinkedHashMap<String, CommandFuture<REQ, RESP, D>>();
+  final futures = LinkedHashMap<String, CommandFuture<Req, Resp, Actions>>();
 
   bool get isEmpty => futures.isEmpty;
 
@@ -558,7 +559,7 @@ class DispatcherFutures<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>> {
     }
   }
 
-  void register(CommandFuture<REQ, RESP, D> future) {
+  void register(CommandFuture<Req, Resp, Actions> future) {
     if (future.command?.id != null)
       futures.remove(future.command.id)?.replaced();
     futures[future.command.id] = future;
@@ -566,12 +567,13 @@ class DispatcherFutures<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>> {
 
   void cancelAll() => futures.values.toList().forEach((f) => f.cancel());
 
-  void cancelAllExcept(CommandFuture<REQ, RESP, D> future) => futures.values
-      .where((f) => f != future)
-      .toList()
-      .forEach((f) => f.cancel());
+  void cancelAllExcept(CommandFuture<Req, Resp, Actions> future) =>
+      futures.values
+          .where((f) => f != future)
+          .toList()
+          .forEach((f) => f.cancel());
 
-  void _remove(CommandFuture<REQ, RESP, D> future) {
+  void _remove(CommandFuture<Req, Resp, Actions> future) {
     final existing = futures[future.id];
     if (existing == future) {
       futures.remove(future.id);

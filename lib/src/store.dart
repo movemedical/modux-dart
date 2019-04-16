@@ -75,6 +75,24 @@ mixin StoreSubscriptionsMixin implements StoreSubscriptions {
 
 typedef Serializers SerializersFactory();
 
+class StoreTester<
+    State extends Built<State, StateBuilder>,
+    StateBuilder extends Builder<State, StateBuilder>,
+    Actions extends ModuxActions<State, StateBuilder, Actions>> {
+  StoreTester(this.store);
+
+  final Store<State, StateBuilder, Actions> store;
+
+  Future cancelAllFutures() async {
+    final futures = <Future>[];
+    store._futureMap.values.forEach((f) {
+      futures.add(f);
+      f.cancel();
+    });
+    if (futures.isNotEmpty) await Future.wait(futures);
+  }
+}
+
 /// [Store] is the container of your state. It listens for actions,
 /// invokes reducers, and publishes changes to the state
 class Store<
@@ -205,6 +223,21 @@ class Store<
         service.init();
       }
     });
+  }
+
+  Future<State> close() async {
+    final state = this.state;
+    await _cancelAllFutures();
+    return state;
+  }
+
+  Future _cancelAllFutures() async {
+    final futures = <Future>[];
+    _futureMap.values.forEach((f) {
+      futures.add(f);
+      f.cancel();
+    });
+    if (futures.isNotEmpty) await Future.wait(futures);
   }
 
   T service<T>() => _services[T] as T;

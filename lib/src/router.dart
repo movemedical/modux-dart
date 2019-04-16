@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:built_collection/built_collection.dart';
@@ -364,7 +365,33 @@ class RouterService implements StoreService, RouterRegistry {
   void dispose() {}
 
   /// Attempts to restore Router UI state on startup.
-  void inflate() {}
+  Future inflate({Duration routeTimeout = const Duration(seconds: 5)}) async {
+    final stack = state?.stack;
+    if (stack == null) {
+      actions.stack(BuiltList<String>());
+      return;
+    }
+    if (stack.isEmpty) return;
+
+    for (int i = 0; i < stack.length; i++) {
+      final route = _registry.routesByName[stack[i]];
+      if (route == null)
+        throw StateError(
+            'Inflation failed because Route type ${stack[i]} does not exist');
+
+      // Start Route.
+      final routeState = route.toActions.$mapState(store.state);
+      final future = route.dispatcher(
+          state: routeState,
+          inflating: true,
+          transitionDuration: Duration.zero);
+      // Wait for platform to register.
+      if (routeTimeout != null && routeTimeout != Duration.zero)
+        await future._ack.future.timeout(routeTimeout);
+      else
+        await future._ack.future;
+    }
+  }
 
   void _push(dynamic route) {
     final index = indexOfPlatform(route);
@@ -375,8 +402,12 @@ class RouterService implements StoreService, RouterRegistry {
       _stack.add(ActiveRoute(route, null, null));
     } else {
       r._pushing();
+      if (r.future != null && !r.future._ack.isCompleted) {
+        r.future._ack.complete();
+      }
       _stack.add(r);
     }
+    _syncState();
   }
 
   void _replace(dynamic oldRoute, dynamic newRoute) {
@@ -393,6 +424,11 @@ class RouterService implements StoreService, RouterRegistry {
 
     o?.future?.complete(CommandResultCode.done);
     _stack[index] = n;
+    if (n.future != null) {
+      if (!n.future._ack.isCompleted) {
+        n.future._ack.complete();
+      }
+    }
     _syncState();
   }
 
@@ -886,17 +922,28 @@ class RouteFuture<
         ResultBuilder,
         Actions,
         D>> extends CommandFuture<RouteCommand<State>, RouteResult<Result>, D> {
-  final RouterService service;
-  final RouteDescriptor descriptor;
-  ActiveRoute _active;
-
-  ActiveRoute get active => _active;
-
-  dynamic get platform => _active?.platform;
-
   RouteFuture(this.service, this.descriptor, D dispatcher,
       Command<RouteCommand<State>> command)
       : super(dispatcher, command);
+
+  final RouterService service;
+  final RouteDescriptor descriptor;
+
+  // Ack completer that completes once PlatformPlugin confirms route
+  // by either pushing or replacing. Popping, removing or any other time
+  // the future completes, the Ack will complete if not already.
+  // When inflating, we wait for an Ack for each entry in the stack in
+  // the proper order.
+  final _ack = Completer<void>();
+  void ack() {
+    if (_ack.isCompleted) return;
+    _ack.complete();
+  }
+
+  ActiveRoute _active;
+  ActiveRoute get active => _active;
+
+  dynamic get platform => _active?.platform;
 
   RouteType get routeType =>
       command?.payload?.routeType ??
@@ -922,6 +969,7 @@ class RouteFuture<
 
   @override
   void done(CommandResult<RouteResult> result) {
+    if (!_ack.isCompleted) _ack.complete();
     service?._done(this, result);
   }
 

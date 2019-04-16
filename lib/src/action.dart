@@ -507,8 +507,19 @@ class StatefulActionsOptions<
         (a) => mapper(this.mapper(a)),
         (s) => localStateMapper(s),
         (s) => localStateMapper(this.stateMapper(s)), (app, b) {
+      final replaceBuilder = this.builderMapper(app);
       if (b != null && b is Built)
-        replace?.call(this.builderMapper(app), b.toBuilder());
+        replace?.call(replaceBuilder, b.toBuilder());
+      else if (b is BuiltList)
+        replace?.call(replaceBuilder, b.toBuilder());
+      else if (b is BuiltMap)
+        replace?.call(replaceBuilder, b.toBuilder());
+      else if (b is BuiltSet)
+        replace?.call(replaceBuilder, b.toBuilder());
+      else if (b is BuiltListMultimap)
+        replace?.call(replaceBuilder, b.toBuilder());
+      else if (b is BuiltSetMultimap)
+        replace?.call(replaceBuilder, b.toBuilder());
       else
         replace?.call(this.builderMapper(app), b);
     });
