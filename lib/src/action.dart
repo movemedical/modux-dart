@@ -74,12 +74,14 @@ class ActionDispatcher<P> extends ActionName<P> {
   final ActionDispatcher<P> Function(ModuxActions) localMapper;
   final ActionDispatcher<P> Function(ModuxActions) mapper;
 
-  void call([P payload]) => _dispatcher(new Action<P>(name, payload, this));
-
   ActionDispatcher(String simpleName, String name, this.parent,
       this.localMapper, this.mapper)
       : _dispatcher = parent.store.dispatch,
         super(simpleName, name);
+
+  Store get store => parent.store.store;
+
+  void call([P payload]) => _dispatcher(new Action<P>(name, payload, this));
 
   bool isDescendentOf(ModuxActions actions) => name.startsWith(actions.$name);
 
