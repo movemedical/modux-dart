@@ -76,7 +76,7 @@ class MiddlewareBuilder<
                       NestedStateBuilder, NestedActions>>(
               ModuxActions<NestedState, NestedStateBuilder, NestedActions>
                   actions) =>
-          NestedMiddlewareBuilder(this, actions.$mapState, actions.$mapActions);
+          NestedMiddlewareBuilder(this, actions.mapState$, actions.mapActions$);
 
   NestedMiddlewareBuilder<State, StateBuilder, Actions, NestedState,
           NestedStateBuilder, NestedActions>

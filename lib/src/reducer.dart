@@ -43,7 +43,7 @@ class ReducerBuilder<State extends Built<State, StateBuilder>,
               ModuxActions<NestedState, NestedStateBuilder, NestedActions>
                   child) =>
           NestedReducerBuilder<State, StateBuilder, NestedState,
-              NestedStateBuilder>(this, child.$mapState, child.$mapBuilder);
+              NestedStateBuilder>(this, child.mapState$, child.mapBuilder$);
 
   /// [build] returns a reducer function that can be passed to a [Store].
   Reducer<State, StateBuilder, dynamic> build() =>

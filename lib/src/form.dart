@@ -13,14 +13,14 @@ class ReduxFormScopeImpl implements ReduxFormScope {
 
   @override
   FormControl<T> control<T>(ModuxValue<T> action) {
-    return _controls[action.$name] as FormControl<T>;
+    return _controls[action.name$] as FormControl<T>;
   }
 
   @override
   Iterable<FormControl> get controls => _controls.values;
 
   @override
-  bool hasControl(ModuxValue action) => _controls.containsKey(action.$name);
+  bool hasControl(ModuxValue action) => _controls.containsKey(action.name$);
 }
 
 abstract class ReduxFormScope {
@@ -34,7 +34,7 @@ abstract class ReduxFormScope {
 abstract class FormControl<T> {
   ModuxValue<T> get action;
 
-  String get name => action?.$name ?? '';
+  String get name => action?.name$ ?? '';
 
   bool get enabled;
 

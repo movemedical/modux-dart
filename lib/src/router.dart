@@ -70,7 +70,7 @@ class RouteDescriptor {
 abstract class HasRouterActions {
   FieldDispatcher<BuiltList<String>> get stack;
 
-  HasRouterState $mapState(Built<dynamic, dynamic> state);
+  HasRouterState mapState$(Built<dynamic, dynamic> state);
 }
 
 abstract class HasRouterState {
@@ -117,16 +117,16 @@ class ReflectiveRouterRegistry implements RouterRegistry {
     final actionsByType = MapBuilder<Type, RouteActions>();
     final actionsByName = MapBuilder<String, RouteActions>();
 
-    store.actions.$visitNested((n) {
+    store.actions.visitNested$((n) {
       if (n is RouteActions) {
-        actionsByName[n.$name] = n;
-        final existing = actionsByType[n.$actionsType];
+        actionsByName[n.name$] = n;
+        final existing = actionsByType[n.actionsType$];
         if (existing != null)
           throw RouteConfigError('RouteActions Type '
-              '[${n.$actionsType}] was injected multiple times \n'
-              '1. ${existing.$name}\n'
-              '2. ${n.$name}');
-        actionsByType[n.$actionsType] = n;
+              '[${n.actionsType$}] was injected multiple times \n'
+              '1. ${existing.name$}\n'
+              '2. ${n.name$}');
+        actionsByType[n.actionsType$] = n;
       }
     });
     _actionsByName = actionsByName.build();
@@ -134,21 +134,21 @@ class ReflectiveRouterRegistry implements RouterRegistry {
 
     final routesByName = MapBuilder<String, RouteDescriptor>();
     final routesByType = SetMultimapBuilder<Type, RouteDescriptor>();
-    store.actions.$visitCommands((owner, cmd) {
+    store.actions.visitCommands$((owner, cmd) {
       if (cmd is RouteDispatcher) {
         // Find toActions.
-        final from = cmd.$mapParent(store.actions);
+        final from = cmd.mapParent$(store.actions);
         final actionsType = cmd.$toActionsType;
         final to = _actionsByType[actionsType];
 
         if (to == null)
           throw RouteConfigError('RouteCommand '
-              '[${cmd.$name}] maps to '
-              '[${cmd.$actionsType}] which is not a RouteActions');
+              '[${cmd.name$}] maps to '
+              '[${cmd.actionsType$}] which is not a RouteActions');
 
-        final entry = RouteDescriptor(cmd.$name, store, cmd, from, to);
+        final entry = RouteDescriptor(cmd.name$, store, cmd, from, to);
 
-        routesByName[cmd.$name] = entry;
+        routesByName[cmd.name$] = entry;
         routesByType.add(cmd.$toActionsType, entry);
       }
     });
@@ -177,13 +177,13 @@ class ActiveRoute {
 
   void _pushing() {
     try {
-      descriptor?.toActions?.$pushing();
+      descriptor?.toActions?.pushing$();
     } catch (e) {}
   }
 
   void _popping() {
     try {
-      descriptor?.toActions?.$popping();
+      descriptor?.toActions?.popping$();
     } catch (e) {}
   }
 }
@@ -320,19 +320,19 @@ class RouterService implements StoreService, RouterRegistry {
     return null;
   }
 
-  HasRouterState get state => actions.$mapState(store.state);
+  HasRouterState get state => actions.mapState$(store.state);
 
   /// Immutable copy of the active stack.
   BuiltList<ActiveRoute> get stack => BuiltList<ActiveRoute>(_stack);
 
   FutureOr<ActiveRoute> waitForActions(RouteActions actions,
       [Duration timeout = Duration.zero]) async {
-    final descriptors = registry.routesByType[actions.$actionsType];
+    final descriptors = registry.routesByType[actions.actionsType$];
     if (descriptors == null || descriptors.isEmpty)
       throw StateError(
-          'Type ${actions.$actionsType} has no routes in the registry.');
+          'Type ${actions.actionsType$} has no routes in the registry.');
     return _doWait(RouteWaiter(
-        (a) => a?.descriptor?.toActions?.$actionsType == actions.$actionsType,
+        (a) => a?.descriptor?.toActions?.actionsType$ == actions.actionsType$,
         timeout));
   }
 
@@ -342,10 +342,10 @@ class RouterService implements StoreService, RouterRegistry {
     if (descriptors == null || descriptors.isEmpty)
       throw StateError('Type $type has no routes in the registry.');
     return await _doWait(RouteWaiter((a) {
-      if (a?.descriptor?.toActions?.$actionsType == type ?? false) {
+      if (a?.descriptor?.toActions?.actionsType$ == type ?? false) {
         return true;
       }
-      if (a?.descriptor?.dispatcher?.$actionsType == type ?? false) {
+      if (a?.descriptor?.dispatcher?.actionsType$ == type ?? false) {
         return true;
       }
 
@@ -367,14 +367,14 @@ class RouterService implements StoreService, RouterRegistry {
   ActiveRoute activeOfName(String name) => _stack?.firstWhere(
       (a) =>
           // Test for dispatcher name.
-          (a.descriptor?.dispatcher?.$name == name ?? false) ||
+          (a.descriptor?.dispatcher?.name$ == name ?? false) ||
           // Test for toActions name.
-          (a.descriptor?.toActions?.$name == name ?? false),
+          (a.descriptor?.toActions?.name$ == name ?? false),
       orElse: () => null);
 
   int indexOfName(String name) {
     for (var i = 0; i < _stack.length; i++) {
-      if (_stack[i]?.descriptor?.dispatcher?.$name == name ?? false) return i;
+      if (_stack[i]?.descriptor?.dispatcher?.name$ == name ?? false) return i;
     }
     return -1;
   }
@@ -450,7 +450,7 @@ class RouterService implements StoreService, RouterRegistry {
             'Inflation failed because Route type ${stack[i]} does not exist');
 
       // Start Route.
-      final routeState = route.toActions.$mapState(store.state);
+      final routeState = route.toActions.mapState$(store.state);
       final future = route.dispatcher(
           state: routeState,
           inflating: true,
@@ -556,7 +556,7 @@ class RouterService implements StoreService, RouterRegistry {
 
     // Ensure Route isn't already in the stack.
     if (_stack?.where((a) => a.descriptor != null)?.firstWhere(
-            (a) => a.descriptor.toActions?.$actionsType == toActionsType,
+            (a) => a.descriptor.toActions?.actionsType$ == toActionsType,
             orElse: () => null) !=
         null) {
 //      future.cancel('already exists');
@@ -623,7 +623,7 @@ class RouterService implements StoreService, RouterRegistry {
       route.platformFuture?.then((n) {
         if (route.future?.isCompleted ?? false)
           route.future?.complete(CommandResultCode.done,
-              response: route.future?.descriptor?.toActions?.resultOf(n));
+              response: route.future?.descriptor?.toActions?.resultOf$(n));
       })?.catchError((e) {
         route.future?.complete(CommandResultCode.error, message: e?.toString());
       });
@@ -635,7 +635,7 @@ class RouterService implements StoreService, RouterRegistry {
       if (_stack.isEmpty) return;
       final index = _stack.indexOf(future.active);
       if (index < 0) {
-        future.active?.descriptor?.toActions?.$deactivated?.call();
+        future.active?.descriptor?.toActions?.deactivated$?.call();
         return;
       }
 
@@ -650,7 +650,7 @@ class RouterService implements StoreService, RouterRegistry {
 
   void _syncState() {
     final next = BuiltList<String>(_stack
-        .map((a) => a.future?.dispatcher?.$name)
+        .map((a) => a.future?.dispatcher?.name$)
         .where((a) => a != null)
         .toList(growable: false));
     if (state?.stack != next) {
@@ -667,48 +667,48 @@ abstract class RouteActions<
     ResultBuilder extends Builder<Result, ResultBuilder>,
     Actions extends RouteActions<State, StateBuilder, Result, ResultBuilder,
         Actions>> extends StatefulActions<State, StateBuilder, Actions> {
-  bool get $isDialog => false;
+  bool get isDialog$ => false;
 
-  RouteType get $routeType => RouteType.page;
+  RouteType get routeType$ => RouteType.page;
 
   /// Dispatched once the route has been acknowledged by the Platform Plugin.
-  ActionDispatcher<Null> get $activated;
+  ActionDispatcher<dynamic> get activated$;
 
   /// Dispatched once the route has been popped/removed from the
   /// Platform Plugin.
-  ActionDispatcher<Null> get $deactivated;
+  ActionDispatcher<dynamic> get deactivated$;
 
-  ActionDispatcher<State> get $pushing;
+  ActionDispatcher<State> get pushing$;
 
-  ActionDispatcher<Result> get $popping;
+  ActionDispatcher<Result> get popping$;
 
   RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, dynamic>
-      get future =>
-          $store.service<RouterService>().activeRouteByType(Actions)?.future
+      get future$ =>
+          store$.service<RouterService>().activeRouteByType(Actions)?.future
               as RouteFuture<State, StateBuilder, Result, ResultBuilder,
                   Actions, dynamic>;
 
-  RouterService get $router => $store.service<RouterService>();
+  RouterService get router$ => store$.service<RouterService>();
 
-  bool $canPop() => $router.canPop();
+  bool canPop$() => router$.canPop();
 
-  bool get $isCurrent => $router.isCurrent(this);
+  bool get isCurrent$ => router$.isCurrent(this);
 
-  Future<bool> $onWillPop() async {
+  Future<bool> onWillPop$() async {
     return true;
   }
 
-  ResultBuilder $newResultBuilder();
+  ResultBuilder newResultBuilder$();
 
-  RouteResult<Result> resultOf(Result result) =>
+  RouteResult<Result> resultOf$(Result result) =>
       RouteResult<Result>((b) => b..value = result);
 
-  bool $pop({Result result, void builder(ResultBuilder b)}) {
-    final router = $router;
+  bool pop$({Result result, void builder(ResultBuilder b)}) {
+    final router = router$;
     if (router == null)
       throw StateError('RouterService not registered in store');
 
-    final active = router.activeOfName($name);
+    final active = router.activeOfName(name$);
     if (active == null) return false;
 
     if (active.platformFuture != null) {
@@ -717,13 +717,13 @@ abstract class RouteActions<
     }
 
     if (builder != null) {
-      final b = $newResultBuilder();
+      final b = newResultBuilder$();
       builder(b);
       result = b.build();
     }
 
     if (result == null) {
-      result = $newResultBuilder().build();
+      result = newResultBuilder$().build();
     }
 
     active.future.complete(CommandResultCode.done,
@@ -733,44 +733,44 @@ abstract class RouteActions<
   }
 
   @override
-  void $reducer(ReducerBuilder reducer) {
-    super.$reducer(reducer);
+  void reducer$(ReducerBuilder reducer) {
+    super.reducer$(reducer);
 
     reducer.nest(this);
   }
 
   @override
-  void $middleware(MiddlewareBuilder builder) {
-    super.$middleware(builder);
+  void middleware$(MiddlewareBuilder builder) {
+    super.middleware$(builder);
 
     builder.nest(this)
-      ..add($activated, (api, next, action) {
+      ..add(activated$, (api, next, action) {
         next(action);
-        $didActivate(api.store, api.state);
+        onActivate$(api.store, api.state);
       })
-      ..add($deactivated, (api, next, action) {
+      ..add(deactivated$, (api, next, action) {
         next(action);
-        $didDeactivate(api.store, api.state);
+        onDeactivate$(api.store, api.state);
       })
-      ..add($pushing, (api, next, action) {
+      ..add(pushing$, (api, next, action) {
         next(action);
-        $onPush(api.store, api.state);
+        onPush$(api.store, api.state);
 //        final service = api.store.service<RouterService>();
       })
-      ..add($popping, (api, next, action) {
+      ..add(popping$, (api, next, action) {
         next(action);
-        $onPop(api.store, api.state, action.payload);
+        onPop$(api.store, api.state, action.payload);
 //        final service = api.store.service<RouterService>();
       });
   }
 
-  void $onPush(Store store, State state) {}
+  void onPush$(Store store, State state) {}
 
-  void $onPop(Store store, State state, Result result) {}
+  void onPop$(Store store, State state, Result result) {}
 
-  void $didActivate(Store store, State state) {}
+  void onActivate$(Store store, State state) {}
 
-  void $didDeactivate(Store store, State state) {}
+  void onDeactivate$(Store store, State state) {}
 }
 
 @BuiltValueEnum(wireName: 'modux/RouteCommandAction')
@@ -882,7 +882,7 @@ abstract class RouteDispatcher<
 
   RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, D>
       get routeFuture =>
-          $store.service<RouterService>().routesByName[$name]?.future;
+          store$.service<RouterService>().routesByName[name$]?.future;
 
   RouteCommand<State> create(
       {State state,
@@ -893,35 +893,35 @@ abstract class RouteDispatcher<
       String predicateName,
       Duration transitionDuration,
       Duration timeout = Duration.zero}) {
-    final service = $store.service<RouterService>();
+    final service = store$.service<RouterService>();
     if (service == null) throw RouteConfigError('RouterService not registered');
 
-    final route = service.routesByName[$name];
+    final route = service.routesByName[name$];
     if (route == null)
-      throw RouteConfigError('Route named [${$name}] was not registered');
+      throw RouteConfigError('Route named [${name$}] was not registered');
 
     if (builder != null) {
-      state = builder(route.toActions.$initialBuilder)?.build() ??
+      state = builder(route.toActions.initialBuilder$)?.build() ??
           state ??
-          route.toActions.$initial;
+          route.toActions.initialState$;
     }
 
     try {
-      if (!route.toActions.$ensureState(state)) {
+      if (!route.toActions.ensureState$(state)) {
         throw StateError(
-            'Command state [${route.toActions.$name}] cannot be initialized. '
-            'Parent state [${route.toActions.$options.parent.name}] is null');
+            'Command state [${route.toActions.name$}] cannot be initialized. '
+            'Parent state [${route.toActions.options$.parent.name}] is null');
       }
     } catch (e) {
       // Ignore.
     }
 
-    if (state == null) state = route.toActions.$initial;
+    if (state == null) state = route.toActions.initialState$;
 
     return (RouteCommandBuilder<State>()
-          ..name = $options.name
-          ..from = $options.parent?.name ?? ''
-          ..to = route.toActions.$name
+          ..name = options$.name
+          ..from = options$.parent?.name ?? ''
+          ..to = route.toActions.name$
           ..state = state
           ..action = action
           ..predicateName = predicateName
@@ -948,7 +948,7 @@ abstract class RouteDispatcher<
         predicateName: predicateName,
         transitionDuration: transitionDuration,
         timeout: timeout);
-    final future = $options.store.store.executeBuilt<
+    final future = options$.store.store.executeBuilt<
         RouteCommand<State>,
         RouteCommandBuilder<State>,
         State,
@@ -964,19 +964,19 @@ abstract class RouteDispatcher<
   @override
   RouteFuture<State, StateBuilder, Result, ResultBuilder, Actions, D> newFuture(
       Command<RouteCommand<State>> command) {
-    final service = $store.service<RouterService>();
+    final service = store$.service<RouterService>();
     if (service == null) throw RouteConfigError('RouterService not registered');
 
-    final route = service.routesByName[$name];
+    final route = service.routesByName[name$];
     if (route == null)
-      throw RouteConfigError('Route named [${$name}] was not registered');
+      throw RouteConfigError('Route named [${name$}] was not registered');
 
     return RouteFuture(service, route, this as D, command);
   }
 
   @override
   String toString() =>
-      'RouteDispatcher{name: ${$name}, type: ${Actions}, toActions:${$toActionsType}}';
+      'RouteDispatcher{name: ${name$}, type: ${Actions}, toActions:${$toActionsType}}';
 }
 
 /// RouteFuture
@@ -999,7 +999,7 @@ class RouteFuture<
       : super(dispatcher, command) {
     _ack.future.then((v) {
       try {
-        descriptor.toActions?.$activated?.call();
+        descriptor.toActions?.activated$?.call();
       } finally {
         service._waiters?.forEach((waiter) => waiter._maybeComplete(v));
       }
@@ -1023,7 +1023,7 @@ class RouteFuture<
 
   RouteType get routeType =>
       command?.payload?.routeType ??
-      descriptor.toActions.$routeType ??
+      descriptor.toActions.routeType$ ??
       RouteType.page;
 
   RouteCommandAction get routeAction =>

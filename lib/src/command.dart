@@ -29,14 +29,10 @@ abstract class StandardCommandDispatcher<REQ, RESP,
     extends CommandDispatcher<REQ, RESP, D> {
   void call(REQ request,
           {String id = '', Duration timeout = const Duration(seconds: 30)}) =>
-      $execute((CommandPayloadBuilder<REQ, RESP, D, Command<REQ>>()
-            ..detached = false
-            ..dispatcher = this as D
-            ..payload = Command<REQ>((b) => b
-              ..id = id == null || id.isEmpty ? uuid.next() : id
-              ..payload = request
-              ..timeout = timeout))
-          .build());
+      execute$(Command<REQ>((b) => b
+        ..id = id == null || id.isEmpty ? uuid.next() : id
+        ..payload = request
+        ..timeout = timeout));
 }
 
 abstract class BuiltCommandDispatcher<
@@ -93,16 +89,13 @@ abstract class CommandDispatcher<Cmd, Result,
         Actions extends CommandDispatcher<Cmd, Result, Actions>>
     extends StatefulActions<CommandState<Cmd, Result>,
         CommandStateBuilder<Cmd, Result>, Actions> {
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, String>> get $cancel;
+  ActionDispatcher<String> get cancel$;
 
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>
-      get $execute;
+  ActionDispatcher<Command<Cmd>> get execute$;
 
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
-      get $result;
+  ActionDispatcher<CommandResult<Result>> get result$;
 
-  ActionDispatcher<CommandPayload<Cmd, Result, Actions, CommandProgress>>
-      get $progress;
+  ActionDispatcher<CommandProgress> get progress$;
 
   Type get commandType => Cmd.runtimeType;
 
@@ -111,52 +104,44 @@ abstract class CommandDispatcher<Cmd, Result,
   CommandFuture<Cmd, Result, Actions> newFuture(Command<Cmd> command);
 
   void execute(Command<Cmd> command) {
-    final payload = payloadOf<Command<Cmd>>(command);
     try {
-      if (!$ensureState()) {
-        throw StateError('Command state [${$name}] cannot be initialized. '
-            'Parent state [${$options.parent.name}] is null');
+      if (!ensureState$()) {
+        throw StateError('Command state [${name$}] cannot be initialized. '
+            'Parent state [${options$.parent.name}] is null');
       }
     } catch (e) {
-      print(e);
+//      print(e);
     }
-    $execute(payload);
+    execute$(command);
   }
 
-  DispatcherFutures<Cmd, Result, Actions> get futures => $store.futuresOf(this);
+  DispatcherFutures<Cmd, Result, Actions> get futures => store$.futuresOf(this);
 
   @override
-  void $reducer(ReducerBuilder reducer) {
-    super.$reducer(reducer);
+  void reducer$(ReducerBuilder reducer) {
+    super.reducer$(reducer);
     reducer.nest(this)
-      ..add($cancel, (state, builder, action) {
+      ..add(cancel$, (state, builder, action) {
         if (builder == null) return;
         builder?.status = CommandStatus.canceling;
       })
-      ..add($execute, (state, builder,
-          Action<CommandPayload<Cmd, Result, Actions, Command<Cmd>>> action) {
+      ..add(execute$, (state, builder, Action<Command<Cmd>> action) {
         if (builder == null) return;
         // Set request.
-        builder.command = action.payload.payload.toBuilder();
+        builder.command = action.payload.toBuilder();
         // Set to 'calling'.
         builder.status = CommandStatus.executing;
       })
-      ..add($progress, (state,
-          builder,
-          Action<CommandPayload<Cmd, Result, Actions, CommandProgress>>
-              action) {
+      ..add(progress$, (state, builder, Action<CommandProgress> action) {
         if (builder == null) return;
         // Set progress.
-        builder.progress = action.payload.payload.toBuilder();
+        builder.progress = action.payload?.toBuilder();
       })
-      ..add($result, (state,
-          builder,
-          Action<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
-              action) {
+      ..add(result$, (state, builder, Action<CommandResult<Result>> action) {
         if (builder == null) return;
         final req = builder.command;
         if (req == null) return;
-        final payload = action.payload?.payload;
+        final payload = action.payload;
         if (payload == null) {
           return;
         }
@@ -171,76 +156,52 @@ abstract class CommandDispatcher<Cmd, Result,
 
   StoreSubscription<Command<Cmd>> onExecute([Function(Command<Cmd>) handler]) =>
       handler != null
-          ? $store.listenMap<CommandPayload<Cmd, Result, Actions, Command<Cmd>>,
-              Command<Cmd>>($execute, (p) => p?.payload, handler)
-          : $store.subscribeMap<
-              CommandPayload<Cmd, Result, Actions, Command<Cmd>>,
-              Command<Cmd>>($execute, (p) => p?.payload);
+          ? store$.listen<Command<Cmd>>(execute$, handler)
+          : store$.subscribe<Command<Cmd>>(execute$);
 
   StoreSubscription<CommandResult<Result>> onResult(
-          [Function(CommandResult<Result>) handler]) =>
+          [Function(CommandResult<Result> r) handler]) =>
       handler != null
-          ? $store.listenMap<
-              CommandPayload<Cmd, Result, Actions, CommandResult<Result>>,
-              CommandResult<Result>>($result, (p) => p?.payload, handler)
-          : $store.subscribeMap<
-              CommandPayload<Cmd, Result, Actions, CommandResult<Result>>,
-              CommandResult<Result>>($result, (p) => p?.payload);
+          ? store$.listen<CommandResult<Result>>(result$, handler)
+          : store$.subscribe<CommandResult<Result>>(result$);
 
-  StoreSubscription<String> onCancel([Function(String) handler]) => handler !=
-          null
-      ? $store.listenMap<CommandPayload<Cmd, Result, Actions, String>, String>(
-          $cancel, (p) => p.payload, handler)
-      : $store
-          .subscribeMap<CommandPayload<Cmd, Result, Actions, String>, String>(
-              $cancel, (p) => p?.payload);
+  StoreSubscription<String> onCancel([Function(String) handler]) =>
+      handler != null
+          ? store$.listen<String>(cancel$, handler)
+          : store$.subscribe<String>(cancel$);
 
   StoreSubscription<CommandProgress> onProgress(
           [Function(CommandProgress) handler]) =>
       handler != null
-          ? $store.listenMap<
-              CommandPayload<Cmd, Result, Actions, CommandProgress>,
-              CommandProgress>($progress, (p) => p?.payload, handler)
-          : $store.subscribeMap<
-              CommandPayload<Cmd, Result, Actions, CommandProgress>,
-              CommandProgress>($progress, (p) => p?.payload);
+          ? store$.listen<CommandProgress>(progress$, handler)
+          : store$.subscribe<CommandProgress>(progress$);
 
   @override
   @mustCallSuper
-  void $middleware(MiddlewareBuilder builder) {
-    super.$middleware(builder);
+  void middleware$(MiddlewareBuilder builder) {
+    super.middleware$(builder);
     builder.nest(this)
-      ..add($cancel, middlewareCancel)
-      ..add($result, middlewareResult)
-      ..add($execute, middlewareExecute)
-      ..add($progress, middlewareProgress);
+      ..add(cancel$, middlewareCancel)
+      ..add(result$, middlewareResult)
+      ..add(execute$, middlewareExecute)
+      ..add(progress$, middlewareProgress);
   }
-
-  CommandPayload<Cmd, Result, Actions, T> payloadOf<T>(T payload) =>
-      (CommandPayloadBuilder<Cmd, Result, Actions, T>()
-            ..dispatcher = this
-            ..detached = false
-            ..payload = payload)
-          .build();
 
   Future<CommandResult<Result>> future(Cmd request,
       {String id = '', Duration timeout = Duration.zero}) {
-    return $store.execute(this, request, timeout: timeout);
+    return store$.execute(this, request, timeout: timeout);
   }
 
   void send(Cmd request, {String id = '', Duration timeout = Duration.zero}) =>
-      $execute((CommandPayload<Cmd, Result, Actions, Command<Cmd>>(
-          Command<Cmd>((b) => b
-            ..id = id == null || id.isEmpty
-                ? request.hashCode?.toString() ?? uuid.next()
-                : id
-            ..payload = request
-            ..timeout = timeout),
-          this)));
+      execute$(Command<Cmd>((b) => b
+        ..id = id == null || id.isEmpty
+            ? request.hashCode?.toString() ?? uuid.next()
+            : id
+        ..payload = request
+        ..timeout = timeout));
 
   ///
-  void cancel([String id]) =>
-      $cancel(CommandPayload<Cmd, Result, Actions, String>(id ?? '', this));
+  void cancel([String id]) => cancel$(id ?? '');
 
   ///
   @protected
@@ -249,7 +210,7 @@ abstract class CommandDispatcher<Cmd, Result,
               CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<Cmd, Result, Actions, Command<Cmd>>> action) async {
+      Action<Command<Cmd>> action) async {
     next(action);
   }
 
@@ -260,8 +221,7 @@ abstract class CommandDispatcher<Cmd, Result,
               CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
-          action) async {
+      Action<CommandResult<Result>> action) async {
     next(action);
   }
 
@@ -272,7 +232,7 @@ abstract class CommandDispatcher<Cmd, Result,
               CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<Cmd, Result, Actions, String>> action) async {
+      Action<String> action) async {
     next(action);
   }
 
@@ -283,8 +243,7 @@ abstract class CommandDispatcher<Cmd, Result,
               CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<Cmd, Result, Actions, CommandProgress>>
-          action) async {
+      Action<CommandProgress> action) async {
     next(action);
   }
 
@@ -295,40 +254,36 @@ abstract class CommandDispatcher<Cmd, Result,
               CommandStateBuilder<Cmd, Result>, Actions>
           api,
       ActionHandler next,
-      Action<CommandPayload<Cmd, Result, Actions, String>> action) async {
+      Action<String> action) async {
     next(action);
   }
 }
 
-abstract class CommandPayload<REQ, RESP,
-        D extends CommandDispatcher<REQ, RESP, D>, P>
-    implements
-        Built<CommandPayload<REQ, RESP, D, P>,
-            CommandPayloadBuilder<REQ, RESP, D, P>> {
-  @nullable
-  bool get detached;
-
-  P get payload;
-
-  D get dispatcher;
-
-  @nullable
-  CommandFuture get future;
-
-  Type get requestType => REQ;
-
-  Type get responseType => RESP;
-
-  Type get dispatcherType => D;
-
-  CommandPayload._();
-
-  factory CommandPayload(P payload, D dispatcher, [bool detached = false]) =>
-      _$CommandPayload<REQ, RESP, D, P>((b) => b
-        ..detached = detached
-        ..payload = payload
-        ..dispatcher = dispatcher);
-}
+//abstract class CommandPayload<D extends CommandDispatcher<dynamic, dynamic, D>,
+//        P>
+//    implements
+//        Built<CommandPayload<REQ, RESP, D, P>,
+//            CommandPayloadBuilder<REQ, RESP, D, P>> {
+//  P get payload;
+//
+//  D get dispatcher;
+//
+//  @nullable
+//  CommandFuture get future;
+//
+//  Type get requestType => REQ;
+//
+//  Type get responseType => RESP;
+//
+//  Type get dispatcherType => D;
+//
+//  CommandPayload._();
+//
+//  factory CommandPayload(P payload, D dispatcher) =>
+//      _$CommandPayload<REQ, RESP, D, P>((b) => b
+//        ..payload = payload
+//        ..dispatcher = dispatcher);
+//}
 
 @BuiltValue(wireName: 'modux/Command')
 abstract class Command<REQ>
@@ -613,11 +568,11 @@ abstract class CommandFuture<REQ, RESP,
 
   bool get isTimerActive => _timer?.isActive ?? false;
 
-  Store get store => dispatcher.$store;
+  Store get store => dispatcher.store$;
 
   Timer get timer => _timer;
 
-  T storeService<T>() => dispatcher.$store.service<T>();
+  T storeService<T>() => dispatcher.store$.service<T>();
 
   CommandFuture(this.dispatcher, this.command) {
     completer.future.then((result) {
@@ -707,8 +662,7 @@ abstract class CommandFuture<REQ, RESP,
 
     try {
       if (!_detached) {
-        dispatcher.$result(CommandPayload<REQ, RESP, D, CommandResult<RESP>>(
-            result, dispatcher));
+        dispatcher?.result$?.call(result);
       }
     } catch (e) {}
 
@@ -772,16 +726,14 @@ abstract class CommandStreamFuture<REQ, RESP,
   bool next(RESP response, {String message = null}) {
     if (completer.isCompleted) return false;
 
-    dispatcher.$result(CommandPayload<REQ, RESP, D, CommandResult<RESP>>(
-        (CommandResultBuilder<RESP>()
-              ..id = command.id ?? ''
-              ..code = CommandResultCode.next
-              ..started = started
-              ..message = message
-              ..value = response
-              ..timestamp = DateTime.now())
-            .build(),
-        dispatcher));
+    dispatcher.result$((CommandResultBuilder<RESP>()
+          ..id = command.id ?? ''
+          ..code = CommandResultCode.next
+          ..started = started
+          ..message = message
+          ..value = response
+          ..timestamp = DateTime.now())
+        .build());
 
     return true;
   }

@@ -136,7 +136,7 @@ class Store<
   }) : logger = Logger('ModuxStore') {
     // Set store reference on root Action Options which allows any
     // Actions or Dispatchers in the graph to use.
-    actions.$options.store.store = this;
+    actions.options$.store.store = this;
 
     _subscription = _actionsController.stream
         .listen(_data, onDone: _done, onError: _onError, cancelOnError: false);
@@ -148,7 +148,7 @@ class Store<
 
     final api = MiddlewareApi<State, StateBuilder, Actions>(this);
 
-    final reducer = actions.$createReducer();
+    final reducer = actions.createReducer$();
     assert(reducer != null, '\$createReducer() returned null');
 
     // setup the dispatch chain
@@ -202,7 +202,7 @@ class Store<
     // Call the handler when an action is dispatched.
     // Patch root dispatcher.
     _dispatcher = handler;
-    actions.$options.store.dispatcher = handler;
+    actions.options$.store.dispatcher = handler;
 
     serviceFactory?.call(this, (service) {
       if (service == null) return;
@@ -265,19 +265,16 @@ class Store<
               logger.severe('CommandMiddleware.next()', e, stackTrace);
             }
 
-            final commandPayload = action.payload;
+            final dispatcher = action.parent;
 
-            if (commandPayload is CommandPayload) {
-              final command = commandPayload.payload;
-              final dispatcher = commandPayload.dispatcher;
-
-              DispatcherFutures futures = _dispatcherFutures[dispatcher.$name];
+            if (dispatcher is CommandDispatcher) {
+              DispatcherFutures futures = _dispatcherFutures[dispatcher.name$];
 
               if (futures == null) {
                 return;
               }
 
-              if (dispatcher.$cancel.name == action.name) {
+              if (dispatcher.cancel$.name == action.name) {
                 CommandFuture future =
                     futures.futures[action.payload?.toString() ?? ''];
 
@@ -342,7 +339,7 @@ class Store<
   DispatcherFutures<REQ, RESP, D>
       futuresOf<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
               D dispatcher) =>
-          _dispatcherFutures[dispatcher.$name];
+          _dispatcherFutures[dispatcher.name$];
 
   /// Execute a Command.
   CommandFuture<REQ, RESP, D>
@@ -350,13 +347,13 @@ class Store<
           D dispatcher, Command<REQ> command) {
     final future = dispatcher.newFuture(command);
 
-    final name = dispatcher.$name;
+    final name = dispatcher.name$;
     DispatcherFutures futures = _dispatcherFutures[name];
 
     if (futures == null) {
       futures = DispatcherFutures<REQ, RESP, D>(
           name, this, _dispatcherFutures, _futureMap, dispatcher);
-      _dispatcherFutures[dispatcher.$name] = futures;
+      _dispatcherFutures[dispatcher.name$] = futures;
     }
 
     final existing = _futureMap[future.uid];
@@ -434,11 +431,11 @@ class Store<
       resultFuture<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
           D dispatcher,
           {Duration timeout = const Duration(seconds: 30)}) async {
-    final state = dispatcher.$mapState(_state);
+    final state = dispatcher.mapState$(_state);
     if (state == null) return Future.error('Command is null');
     if (state.isCompleted) return Future.value(state.result);
 
-    return (await actionFuture(dispatcher.$result))?.payload;
+    return (await actionFuture(dispatcher.result$));
   }
 
   ///
@@ -511,10 +508,10 @@ class Store<
   ///
   StoreSubject nestedStream(ModuxActions actions, Function(ActionEvent) handler,
       {Duration timeout = Duration.zero}) {
-    var entry = _nestedMap[actions.$name];
+    var entry = _nestedMap[actions.name$];
     if (entry == null) {
-      entry = _NestedEntry(this, actions.$name, actions);
-      _nestedMap[actions.$name] = entry;
+      entry = _NestedEntry(this, actions.name$, actions);
+      _nestedMap[actions.name$] = entry;
     }
     final sub = entry.register<ActionEvent, ActionEvent>(
         scope: currentController, handler: handler, mapper: (event) => event);
@@ -564,7 +561,7 @@ class Store<
   ModuxActions nestedOfName(String name) {
     if (name == null) return null;
     if (name.isEmpty) return this.actions;
-    return actions.$nestedByRelativeName(name);
+    return actions.nestedByRelativeName$(name);
   }
 
   void dispatch<T>(Action<T> action) => _dispatcher?.call(action);
@@ -577,10 +574,10 @@ class Store<
           LocalActions extends ModuxActions<LocalState,
               LocalStateBuilder, LocalActions>>(LocalActions actions,
       [Function() scoped]) {
-    var scope = _controllersMap[actions.$name];
+    var scope = _controllersMap[actions.name$];
     if (scope == null) {
       scope = ModuxController<State, StateBuilder, Actions, LocalState,
-          LocalStateBuilder, LocalActions>(this, actions, actions.$name);
+          LocalStateBuilder, LocalActions>(this, actions, actions.name$);
       _controllersMap[scope.name] = scope;
     }
     _controllerStack.add(scope);
@@ -599,11 +596,11 @@ class Store<
           LocalStateBuilder extends Builder<LocalState, LocalStateBuilder>,
           LocalActions extends ModuxActions<LocalState, LocalStateBuilder,
               LocalActions>>(LocalActions actions) =>
-      _controllersMap[actions.$name];
+      _controllersMap[actions.name$];
 
   bool hasController(ModuxActions actions) {
     if (actions == null) return false;
-    return _controllersMap.containsKey(actions.$name);
+    return _controllersMap.containsKey(actions.name$);
   }
 }
 

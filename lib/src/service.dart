@@ -34,5 +34,5 @@ abstract class StatefulActionsService<
 
   final Actions actions;
 
-  State get state => actions.$mapState(store.state);
+  State get state => actions.mapState$(store.state);
 }
