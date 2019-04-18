@@ -107,7 +107,7 @@ class Store<
       _stateController = StreamController.broadcast();
   final StreamController<ActionEvent> _actionsController =
       StreamController.broadcast();
-  final _services = LinkedHashMap<Type, dynamic>();
+  final _services = LinkedHashMap<Type, StoreService>();
   final _dispatcherFutures = LinkedHashMap<String, DispatcherFutures>();
   final _futureMap = Map<String, CommandFuture>();
   final _actionMap = LinkedHashMap<String, _ActionEntry>();
@@ -226,8 +226,10 @@ class Store<
   }
 
   Future<State> close() async {
+    _services.values.forEach((s) => s?.dispose());
     final state = this.state;
     await _cancelAllFutures();
+    await dispose();
     return state;
   }
 
@@ -238,6 +240,15 @@ class Store<
       f.cancel();
     });
     if (futures.isNotEmpty) await Future.wait(futures);
+  }
+
+  /// [dispose] removes closes both the dispatch and subscription stream
+  Future<Null> dispose() async {
+    _subscription?.cancel();
+    await _stateController.close();
+    await _actionsController.close();
+    _state = null;
+    _actions = null;
   }
 
   T service<T>() => _services[T] as T;
@@ -278,15 +289,6 @@ class Store<
               }
             }
           };
-
-  /// [dispose] removes closes both the dispatch and subscription stream
-  Future<Null> dispose() async {
-    _subscription?.cancel();
-    await _stateController.close();
-    await _actionsController.close();
-    _state = null;
-    _actions = null;
-  }
 
   /// [state] returns the current state
   State get state => _state;

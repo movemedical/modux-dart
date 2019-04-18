@@ -523,7 +523,7 @@ class StatefulActionsOptions<
       else if (b is BuiltSetMultimap)
         replace?.call(replaceBuilder, b.toBuilder());
       else
-        replace?.call(this.builderMapper(app), b);
+        replace?.call(replaceBuilder, b);
     });
   }
 

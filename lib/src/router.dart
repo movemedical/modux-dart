@@ -149,7 +149,7 @@ class ReflectiveRouterRegistry implements RouterRegistry {
         final entry = RouteDescriptor(cmd.$name, store, cmd, from, to);
 
         routesByName[cmd.$name] = entry;
-        routesByType.add(cmd.$actionsType, entry);
+        routesByType.add(cmd.$toActionsType, entry);
       }
     });
 
@@ -175,18 +175,6 @@ class ActiveRoute {
     return 'ActiveRoute{platform: $platform, future: $future}';
   }
 
-  void _activated() {
-    try {
-      descriptor?.toActions?.$activated();
-    } catch (e) {}
-  }
-
-  void _deactivated() {
-    try {
-      descriptor?.toActions?.$deactivated();
-    } catch (e) {}
-  }
-
   void _pushing() {
     try {
       descriptor?.toActions?.$pushing();
@@ -207,23 +195,64 @@ class RouterServiceMutator<T> {
   RouterServiceMutator(this.service);
 
   void push(dynamic route) {
-    service._push(route);
+    service._didPush(route);
   }
 
   void pop(dynamic route) {
-    service._pop(route);
+    service._didPop(route);
   }
 
   void replace(dynamic oldRoute, dynamic newRoute) {
-    service._replace(oldRoute, newRoute);
+    service._didReplace(oldRoute, newRoute);
   }
 
   void removed(dynamic route, dynamic previousRoute) {
-    service._removed(route, previousRoute);
+    service._didRemove(route, previousRoute);
   }
 
   void sync() {
     service._syncState();
+  }
+}
+
+class RouteWaiter extends LinkedListEntry<RouteWaiter> {
+  RouteWaiter(this.matcher, Duration timeout) {
+    if (timeout != null && timeout != Duration.zero) {
+      _timer = Timer(timeout, () {
+        if (completer.isCompleted) return;
+        completer.completeError(TimeoutException('timeout'));
+      });
+    }
+    completer.future.then((a) {
+      _timer?.cancel();
+      _timer = null;
+      unlink();
+    }, onError: (e) {
+      _timer?.cancel();
+      _timer = null;
+      try {
+        unlink();
+      } catch (e) {}
+    });
+  }
+
+  final bool Function(ActiveRoute r) matcher;
+  final completer = Completer<ActiveRoute>();
+  Timer _timer;
+
+  void cancel() {
+    if (completer.isCompleted) return;
+    completer.completeError(CanceledException());
+  }
+
+  bool _maybeComplete(ActiveRoute r) {
+    if (r.descriptor == null) return true;
+    if (completer.isCompleted) return true;
+    if (matcher(r)) {
+      completer.complete(r);
+      return true;
+    }
+    return false;
   }
 }
 
@@ -234,6 +263,7 @@ class RouterService implements StoreService, RouterRegistry {
   RouterServiceMutator _mutator;
   final _stack = List<ActiveRoute>();
   final _byPlatform = LinkedHashMap<dynamic, ActiveRoute>();
+  final _waiters = LinkedList<RouteWaiter>();
 
   final HasRouterActions actions;
   RouterRegistry _registry;
@@ -294,6 +324,44 @@ class RouterService implements StoreService, RouterRegistry {
 
   /// Immutable copy of the active stack.
   BuiltList<ActiveRoute> get stack => BuiltList<ActiveRoute>(_stack);
+
+  FutureOr<ActiveRoute> waitForActions(RouteActions actions,
+      [Duration timeout = Duration.zero]) async {
+    final descriptors = registry.routesByType[actions.$actionsType];
+    if (descriptors == null || descriptors.isEmpty)
+      throw StateError(
+          'Type ${actions.$actionsType} has no routes in the registry.');
+    return _doWait(RouteWaiter(
+        (a) => a?.descriptor?.toActions?.$actionsType == actions.$actionsType,
+        timeout));
+  }
+
+  FutureOr<ActiveRoute> waitForType(Type type,
+      [Duration timeout = const Duration(seconds: 5)]) async {
+    final descriptors = registry.routesByType[type];
+    if (descriptors == null || descriptors.isEmpty)
+      throw StateError('Type $type has no routes in the registry.');
+    return await _doWait(RouteWaiter((a) {
+      if (a?.descriptor?.toActions?.$actionsType == type ?? false) {
+        return true;
+      }
+      if (a?.descriptor?.dispatcher?.$actionsType == type ?? false) {
+        return true;
+      }
+
+      return false;
+    }, timeout));
+  }
+
+  FutureOr<ActiveRoute> _doWait(RouteWaiter waiter) async {
+    _waiters.add(waiter);
+    for (int i = 0; i < _stack.length; i++) {
+      final r = _stack[i];
+      if (r.future == null) continue;
+      if (waiter._maybeComplete(r)) return r;
+    }
+    return await waiter.completer.future;
+  }
 
   /// Find the active route based on RouteDispatcher name.
   ActiveRoute activeOfName(String name) => _stack?.firstWhere(
@@ -362,7 +430,9 @@ class RouterService implements StoreService, RouterRegistry {
   void init() {}
 
   @override
-  void dispose() {}
+  void dispose() {
+    List.of(_waiters).forEach((w) => w.cancel());
+  }
 
   /// Attempts to restore Router UI state on startup.
   Future inflate({Duration routeTimeout = const Duration(seconds: 5)}) async {
@@ -393,7 +463,7 @@ class RouterService implements StoreService, RouterRegistry {
     }
   }
 
-  void _push(dynamic route) {
+  void _didPush(dynamic route) {
     final index = indexOfPlatform(route);
     if (index != -1) return;
     final r = _byPlatform.remove(route);
@@ -401,16 +471,15 @@ class RouterService implements StoreService, RouterRegistry {
     if (r == null) {
       _stack.add(ActiveRoute(route, null, null));
     } else {
-      r._pushing();
       if (r.future != null && !r.future._ack.isCompleted) {
-        r.future._ack.complete();
+        r.future._ack.complete(r);
       }
       _stack.add(r);
     }
     _syncState();
   }
 
-  void _replace(dynamic oldRoute, dynamic newRoute) {
+  void _didReplace(dynamic oldRoute, dynamic newRoute) {
     final index = indexOfPlatform(oldRoute);
     final n = _byPlatform.remove(newRoute);
     if (index == -1) {
@@ -425,14 +494,15 @@ class RouterService implements StoreService, RouterRegistry {
     o?.future?.complete(CommandResultCode.done);
     _stack[index] = n;
     if (n.future != null) {
+      // Acknowledge
       if (!n.future._ack.isCompleted) {
-        n.future._ack.complete();
+        n.future._ack.complete(n);
       }
     }
     _syncState();
   }
 
-  void _removed(dynamic platform, dynamic previousPlatform) {
+  void _didRemove(dynamic platform, dynamic previousPlatform) {
     _byPlatform.remove(platform);
     final index = indexOfPlatform(platform);
     if (index == -1) return;
@@ -445,7 +515,7 @@ class RouterService implements StoreService, RouterRegistry {
     _syncState();
   }
 
-  void _pop(dynamic platform) {
+  void _didPop(dynamic platform) {
     // Ensure it's removed from byPlatform map.
     _byPlatform.remove(platform);
 
@@ -457,7 +527,6 @@ class RouterService implements StoreService, RouterRegistry {
     if (index == _stack.length - 1) {
       try {
         final popped = _stack.removeLast();
-        popped?._popping();
 
         if (!(popped?.future?.isCompleted ?? true)) {
           popped?.future?.complete(CommandResultCode.done);
@@ -504,8 +573,8 @@ class RouterService implements StoreService, RouterRegistry {
     }
 
     if (platform == null) {
-//      future.cancel('createRoute() returned null');
-      future.cancel();
+      future.complete(CommandResultCode.error,
+          message: 'createRoute() returned null');
       return;
     }
 
@@ -602,8 +671,11 @@ abstract class RouteActions<
 
   RouteType get $routeType => RouteType.page;
 
+  /// Dispatched once the route has been acknowledged by the Platform Plugin.
   ActionDispatcher<Null> get $activated;
 
+  /// Dispatched once the route has been popped/removed from the
+  /// Platform Plugin.
   ActionDispatcher<Null> get $deactivated;
 
   ActionDispatcher<State> get $pushing;
@@ -924,7 +996,15 @@ class RouteFuture<
         D>> extends CommandFuture<RouteCommand<State>, RouteResult<Result>, D> {
   RouteFuture(this.service, this.descriptor, D dispatcher,
       Command<RouteCommand<State>> command)
-      : super(dispatcher, command);
+      : super(dispatcher, command) {
+    _ack.future.then((v) {
+      try {
+        descriptor.toActions?.$activated?.call();
+      } finally {
+        service._waiters?.forEach((waiter) => waiter._maybeComplete(v));
+      }
+    });
+  }
 
   final RouterService service;
   final RouteDescriptor descriptor;
@@ -934,11 +1014,7 @@ class RouteFuture<
   // the future completes, the Ack will complete if not already.
   // When inflating, we wait for an Ack for each entry in the stack in
   // the proper order.
-  final _ack = Completer<void>();
-  void ack() {
-    if (_ack.isCompleted) return;
-    _ack.complete();
-  }
+  final _ack = Completer<ActiveRoute>();
 
   ActiveRoute _active;
   ActiveRoute get active => _active;
