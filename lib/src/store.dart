@@ -28,10 +28,10 @@ abstract class StoreService {
   Type get keyType;
 
   ///
-  void init();
+  Future init();
 
   ///
-  void dispose();
+  Future dispose();
 }
 
 abstract class StoreSubscriptions {
@@ -226,7 +226,8 @@ class Store<
   }
 
   Future<State> close() async {
-    _services.values.forEach((s) => s?.dispose());
+    final serviceFutures = _services.values.map((s) => s.dispose());
+    await Future.wait(serviceFutures);
     final state = this.state;
     await _cancelAllFutures();
     await dispose();
@@ -235,7 +236,7 @@ class Store<
 
   Future _cancelAllFutures() async {
     final futures = <Future>[];
-    _futureMap.values.forEach((f) {
+    Map.of(_futureMap).values.forEach((f) {
       futures.add(f);
       f.cancel();
     });
@@ -333,7 +334,7 @@ class Store<
 
   /// Waits for the next action from the specified ActionDispatcher to
   /// be dispatched.
-  Future<ModuxEvent<P>> actionFuture<P>(ActionDispatcher<P> action,
+  Future<P> actionFuture<P>(ActionDispatcher<P> action,
           {Duration timeout = const Duration(seconds: 30),
           bool where(Action<P> action)}) async =>
       listen(action, null).toFuture(timeout);
@@ -406,7 +407,9 @@ class Store<
     return executeCommand(
         dispatcher,
         Command<Cmd>((b) => b
-          ..id = id == null || id.isEmpty ? uuid.next() : id
+          ..id = id == null || id.isEmpty
+              ? request?.hashCode?.toString() ?? uuid.next()
+              : id
           ..payload = request
           ..timeout = timeout));
   }
@@ -419,7 +422,9 @@ class Store<
     return executeCommand(
         dispatcher,
         Command<REQ>((b) => b
-          ..id = id == null || id.isEmpty ? uuid.next() : id
+          ..id = id == null || id.isEmpty
+              ? request?.hashCode?.toString() ?? uuid.next()
+              : id
           ..payload = request
           ..timeout = timeout));
   }
@@ -433,7 +438,7 @@ class Store<
     if (state == null) return Future.error('Command is null');
     if (state.isCompleted) return Future.value(state.result);
 
-    return (await actionFuture(dispatcher.$result))?.value?.payload;
+    return (await actionFuture(dispatcher.$result))?.payload;
   }
 
   ///
@@ -442,6 +447,13 @@ class Store<
 
   ///
   StoreSubscription<P> subscribe<P>(ActionDispatcher<P> dispatcher,
+      {Duration timeout = Duration.zero}) {
+    return subscribeMap<P, P>(dispatcher, (p) => p);
+  }
+
+  ///
+  StoreSubscription<T> subscribeMap<P, T>(
+      ActionDispatcher<P> dispatcher, T map(P),
       {Duration timeout = Duration.zero}) {
     final actions = dispatcher.parent.mapper(this.actions);
 
@@ -453,11 +465,11 @@ class Store<
       entry = _ActionEntry(this, dispatcher.name, actions, dispatcher);
       _actionMap[dispatcher.name] = entry;
     }
-    final sub = entry.register<P>(
+    final sub = entry.register<P, T>(
         scope: currentController,
         dispatcher: dispatcher,
         handler: (_) {},
-        mapper: (event) => Ok<P>(event.action.payload as P, event));
+        mapper: (event) => map(event.action.payload as P));
 
     if (_subMixinStack.isNotEmpty) _subMixinStack.last.addSubscription(sub);
 
@@ -465,8 +477,14 @@ class Store<
   }
 
   ///
-  StoreSubject<P> listen<P>(
-      ActionDispatcher<P> dispatcher, Function(ModuxEvent<P>) handler,
+  StoreSubject<P> listen<P>(ActionDispatcher<P> dispatcher, Function(P) handler,
+      {Duration timeout = Duration.zero}) {
+    return listenMap<P, P>(dispatcher, (p) => p, handler, timeout: timeout);
+  }
+
+  ///
+  StoreSubject<T> listenMap<P, T>(
+      ActionDispatcher<P> dispatcher, T map(P), Function(T) handler,
       {Duration timeout = Duration.zero}) {
     final actions = dispatcher.parent.mapper(this.actions);
 
@@ -479,11 +497,11 @@ class Store<
       entry = _ActionEntry(this, dispatcher.name, actions, dispatcher);
       _actionMap[dispatcher.name] = entry;
     }
-    final sub = entry.register<P>(
+    final sub = entry.register<P, T>(
         scope: currentController,
         dispatcher: dispatcher,
         handler: handler,
-        mapper: (event) => Ok<P>(event.action.payload as P, event));
+        mapper: (event) => map(event.action.payload as P));
 
     if (_subMixinStack.isNotEmpty) _subMixinStack.last.addSubscription(sub);
 
@@ -491,17 +509,15 @@ class Store<
   }
 
   ///
-  StoreSubject nestedStream(ModuxActions actions, Function(ModuxEvent) handler,
+  StoreSubject nestedStream(ModuxActions actions, Function(ActionEvent) handler,
       {Duration timeout = Duration.zero}) {
     var entry = _nestedMap[actions.$name];
     if (entry == null) {
       entry = _NestedEntry(this, actions.$name, actions);
       _nestedMap[actions.$name] = entry;
     }
-    final sub = entry.register(
-        scope: currentController,
-        handler: handler,
-        mapper: (event) => Ok(event.action.payload, event));
+    final sub = entry.register<ActionEvent, ActionEvent>(
+        scope: currentController, handler: handler, mapper: (event) => event);
 
     if (_subMixinStack.isNotEmpty) _subMixinStack.last.addSubscription(sub);
 
@@ -661,14 +677,14 @@ abstract class _SubscriptionEntry {
 
   _SubscriptionEntry(this.store, this.name, this.actions);
 
-  StoreSubject<T> register<T>(
+  StoreSubject<T> register<P, T>(
       {ModuxController scope,
-      ActionDispatcher<T> dispatcher,
+      ActionDispatcher<P> dispatcher,
       bool Function(ActionEvent event) where,
-      ModuxEvent<T> Function(ActionEvent event) mapper,
-      Function(ModuxEvent<T>) handler,
+      T Function(ActionEvent event) mapper,
+      Function(T) handler,
       Duration timeout = Duration.zero}) {
-    final sub = StoreSubject(scope, this, dispatcher, where, mapper, handler,
+    final sub = StoreSubject<T>(scope, this, dispatcher, where, mapper, handler,
         timeout: timeout);
     subs.add(sub);
     scope?.addSubscription(sub);
@@ -723,19 +739,18 @@ class ClosedException implements Exception {
   ClosedException([this.message]);
 }
 
-abstract class StoreSubscription<T> implements Observable<ModuxEvent<T>> {
+abstract class StoreSubscription<T> implements Observable<T> {
   void cancel();
 }
 
 ///
-class StoreSubject<T> extends Subject<ModuxEvent<T>>
-    implements StoreSubscription<T> {
+class StoreSubject<T> extends Subject<T> implements StoreSubscription<T> {
   final ModuxController owner;
   final _SubscriptionEntry entry;
   final ActionDispatcher dispatcher;
   final bool Function(ActionEvent event) _where;
-  final ModuxEvent<T> Function(ActionEvent event) mapper;
-  final Function(ModuxEvent<T>) handler;
+  final T Function(ActionEvent event) mapper;
+  final Function(T) handler;
   final Duration duration;
 
   StreamSubscription _sub;
@@ -748,8 +763,8 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
       this.mapper,
       this.handler,
       this.duration,
-      StreamController<ModuxEvent<T>> ctrl,
-      Observable<ModuxEvent<T>> observable)
+      StreamController<T> ctrl,
+      Observable<T> observable)
       : super(ctrl, observable);
 
   void _start() {
@@ -764,22 +779,22 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
       _SubscriptionEntry entry,
       ActionDispatcher dispatcher,
       bool Function(ActionEvent event) _where,
-      ModuxEvent<T> Function(ActionEvent event) mapper,
-      Function(ModuxEvent<T>) handler,
+      T Function(ActionEvent event) mapper,
+      Function(T) handler,
       {Duration timeout = Duration.zero}) {
     // ignore: close_sinks
-    final controller = StreamController<ModuxEvent<T>>.broadcast(
+    final controller = StreamController<T>.broadcast(
       sync: true,
     );
 
-    Stream<ModuxEvent<T>> stream = controller.stream;
+    Stream<T> stream = controller.stream;
 
     if (timeout != Duration.zero) {
       stream = stream.timeout(timeout,
-          onTimeout: (sink) => sink.add(Err<T>(TimeoutException('timeout'))));
+          onTimeout: (sink) => sink.addError(TimeoutException('timeout')));
     }
 
-    final observable = Observable<ModuxEvent<T>>(stream);
+    final observable = Observable<T>(stream);
 
     final subject = StoreSubject<T>._(scope, entry, dispatcher, _where, mapper,
         handler, timeout, controller, observable);
@@ -827,21 +842,20 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
   /// Is this subscription owned by a scope?
   bool get isScoped => owner != null;
 
-  Future<ModuxEvent<T>> asFuture() async => toFuture(Duration.zero);
+  Future<T> asFuture() async => first;
 
   ///
-  Future<ModuxEvent<T>> toFuture(
-      [Duration timeout = const Duration(seconds: 30)]) async {
+  Future<T> toFuture([Duration timeout = const Duration(seconds: 30)]) async {
     if (isClosed) {
       return Future.error(ClosedException());
     }
 
-    final completer = Completer<ModuxEvent<T>>();
+    final completer = Completer<T>();
 
     var stream = this.stream;
     if (timeout != Duration.zero) {
       stream = stream.timeout(timeout,
-          onTimeout: (sink) => sink.add(Err<T>(TimeoutException('timeout'))));
+          onTimeout: (sink) => sink.addError(TimeoutException('timeout')));
     }
 
     StreamSubscription subscription = null;
@@ -878,13 +892,13 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
     return completer.future;
   }
 
-  ModuxEvent<T> _map(ActionEvent event) {
+  T _map(ActionEvent event) {
     if (mapper == null) return null;
     try {
       if (!__where(event)) return null;
       return mapper(event);
     } catch (e, stackTrace) {
-      return Err<T>(e, stackTrace, event);
+      addError(e, stackTrace);
     }
   }
 
@@ -896,17 +910,12 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
     } catch (e, stackTrace) {}
   }
 
-  void _data(ModuxEvent<T> event) {
+  void _data(T event) {
     try {
       handler?.call(event);
-    } finally {
-      try {
-//        _subjects?.forEach((s) => s.add(event));
-      } finally {
-        if (event.isTimeout) {
-          close();
-        }
-      }
+    } catch (e, stackTrace) {
+      addError(e, stackTrace);
+//      sink.addError(e, stackTrace);
     }
   }
 
@@ -920,9 +929,7 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
       final value = _map(event);
       add(value);
     } catch (e, stackTrace) {
-      try {
-        add(Err<T>(e, stackTrace));
-      } catch (e) {}
+      addError(e, stackTrace);
     }
   }
 
@@ -958,93 +965,6 @@ class StoreSubject<T> extends Subject<ModuxEvent<T>>
 }
 
 ///
-abstract class ModuxEvent<T> {
-  bool get isOk;
-
-  bool get isErr;
-
-  bool get isTimeout;
-
-  bool get isCanceled;
-
-  bool get isClosed;
-
-  T get value;
-
-  ActionEvent get event;
-
-  static Err<T> timeout<T>(
-      [TimeoutException e, dynamic stackTrace, ActionEvent event]) {
-    return Err<T>(e ?? TimeoutException('timeout'), stackTrace, event);
-  }
-}
-
-///
-class Ok<T> implements ModuxEvent<T> {
-  final T value;
-  final ActionEvent event;
-
-  Ok(this.value, [this.event]);
-
-  @override
-  bool get isOk => true;
-
-  @override
-  bool get isErr => false;
-
-  @override
-  bool get isTimeout => false;
-
-  @override
-  bool get isCanceled => false;
-
-  @override
-  bool get isClosed => false;
-
-  @override
-  String toString() {
-    return 'Ok<$T>{ $value }';
-  }
-}
-
-///
-class Err<T> implements ModuxEvent<T> {
-  final ActionEvent event;
-  final dynamic error;
-  final dynamic stackTrace;
-
-  Err(this.error, [this.stackTrace, this.event]);
-
-  @override
-  T get value => null;
-
-  @override
-  bool get isOk => false;
-
-  @override
-  bool get isErr => true;
-
-  @override
-  bool get isTimeout => error is TimeoutException;
-
-  @override
-  bool get isCanceled => error is CanceledException;
-
-  @override
-  bool get isClosed => error is ClosedException;
-
-  Duration get duration =>
-      (error is TimeoutException) ? error.duration : Duration.zero;
-
-  String get message => error?.toString();
-
-  @override
-  String toString() {
-    return 'Err<$T>{error: $error${stackTrace != null ? ', stackTrace: $stackTrace' : ''}}';
-  }
-}
-
-///
 abstract class JsonService implements StoreService {
   @override
   Type get keyType => JsonService;
@@ -1068,10 +988,10 @@ class DefaultJsonService extends JsonService {
   DefaultJsonService(this.store, this.serializers);
 
   @override
-  void init() {}
+  Future init() async {}
 
   @override
-  void dispose() {}
+  Future dispose() async {}
 
   @override
   Future<List<int>> serialize<T>(Serializer<T> serializer, T message) async {

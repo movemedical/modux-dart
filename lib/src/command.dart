@@ -169,51 +169,41 @@ abstract class CommandDispatcher<Cmd, Result,
       });
   }
 
-  StoreSubscription<CommandPayload<Cmd, Result, Actions, Command<Cmd>>>
-      onExecute(
-              [Function(
-                      ModuxEvent<
-                          CommandPayload<Cmd, Result, Actions, Command<Cmd>>>,
-                      Command<Cmd>)
-                  handler]) =>
-          handler != null
-              ? $store.listen($execute,
-                  (event) => handler?.call(event, event?.value?.payload))
-              : $store.subscribe($execute);
-
-  StoreSubscription<CommandPayload<Cmd, Result, Actions, CommandResult<Result>>>
-      onResult(
-              [Function(
-                      ModuxEvent<
-                          CommandPayload<Cmd, Result, Actions,
-                              CommandResult<Result>>>,
-                      CommandResult<Result>)
-                  handler]) =>
-          handler != null
-              ? $store.listen($result,
-                  (event) => handler?.call(event, event?.value?.payload))
-              : $store.subscribe($result);
-
-  StoreSubscription<CommandPayload<Cmd, Result, Actions, String>> onCancel(
-          [Function(ModuxEvent<CommandPayload<Cmd, Result, Actions, String>>,
-                  String)
-              handler]) =>
+  StoreSubscription<Command<Cmd>> onExecute([Function(Command<Cmd>) handler]) =>
       handler != null
-          ? $store.listen(
-              $cancel, (event) => handler?.call(event, event?.value?.payload))
-          : $store.subscribe($cancel);
+          ? $store.listenMap<CommandPayload<Cmd, Result, Actions, Command<Cmd>>,
+              Command<Cmd>>($execute, (p) => p?.payload, handler)
+          : $store.subscribeMap<
+              CommandPayload<Cmd, Result, Actions, Command<Cmd>>,
+              Command<Cmd>>($execute, (p) => p?.payload);
 
-  StoreSubscription<
-      CommandPayload<Cmd, Result, Actions, CommandProgress>> onProgress(
-          [Function(
-                  ModuxEvent<
-                      CommandPayload<Cmd, Result, Actions, CommandProgress>>,
-                  CommandProgress)
-              handler]) =>
+  StoreSubscription<CommandResult<Result>> onResult(
+          [Function(CommandResult<Result>) handler]) =>
       handler != null
-          ? $store.listen(
-              $progress, (event) => handler?.call(event, event?.value?.payload))
-          : $store.subscribe($progress);
+          ? $store.listenMap<
+              CommandPayload<Cmd, Result, Actions, CommandResult<Result>>,
+              CommandResult<Result>>($result, (p) => p?.payload, handler)
+          : $store.subscribeMap<
+              CommandPayload<Cmd, Result, Actions, CommandResult<Result>>,
+              CommandResult<Result>>($result, (p) => p?.payload);
+
+  StoreSubscription<String> onCancel([Function(String) handler]) => handler !=
+          null
+      ? $store.listenMap<CommandPayload<Cmd, Result, Actions, String>, String>(
+          $cancel, (p) => p.payload, handler)
+      : $store
+          .subscribeMap<CommandPayload<Cmd, Result, Actions, String>, String>(
+              $cancel, (p) => p?.payload);
+
+  StoreSubscription<CommandProgress> onProgress(
+          [Function(CommandProgress) handler]) =>
+      handler != null
+          ? $store.listenMap<
+              CommandPayload<Cmd, Result, Actions, CommandProgress>,
+              CommandProgress>($progress, (p) => p?.payload, handler)
+          : $store.subscribeMap<
+              CommandPayload<Cmd, Result, Actions, CommandProgress>,
+              CommandProgress>($progress, (p) => p?.payload);
 
   @override
   @mustCallSuper
@@ -241,7 +231,9 @@ abstract class CommandDispatcher<Cmd, Result,
   void send(Cmd request, {String id = '', Duration timeout = Duration.zero}) =>
       $execute((CommandPayload<Cmd, Result, Actions, Command<Cmd>>(
           Command<Cmd>((b) => b
-            ..id = id == null || id.isEmpty ? uuid.next() : id
+            ..id = id == null || id.isEmpty
+                ? request.hashCode?.toString() ?? uuid.next()
+                : id
             ..payload = request
             ..timeout = timeout),
           this)));

@@ -94,7 +94,7 @@ class ActionDispatcher<P> extends ActionName<P> {
       return _countChars(n, '.');
   }
 
-  StoreSubscription<P> listen([Function(ModuxEvent<P>) handler]) =>
+  StoreSubscription<P> listen([Function(P) handler]) =>
       parent?.store?.store?.listen(this, handler);
 
   StoreSubscription<P> subscribe() => parent.store.store.subscribe(this);
@@ -332,15 +332,15 @@ abstract class ModuxActions<
               StateBuilder extends Builder<State, StateBuilder>,
               Actions extends ModuxActions<State, StateBuilder, Actions>>(
           Store<State, StateBuilder, Actions> store,
-          [Function(ModuxEvent) handler]) =>
+          [Function(ActionEvent) handler]) =>
       store.nestedStream(this, handler);
 
-  bool $isAncestor<T>(ModuxEvent<T> event) =>
-      event.event.name.startsWith($name) || $name.startsWith(event.event.name);
+  bool $isAncestor<T>(Action<T> event) =>
+      event.name.startsWith($name) || $name.startsWith(event.name);
 
-  bool $isParent<T>(ModuxEvent<T> event) => $name.startsWith(event.event.name);
+  bool $isParent<T>(Action<T> event) => $name.startsWith(event.name);
 
-  bool $isChild<T>(ModuxEvent<T> event) => event.event.name.startsWith($name);
+  bool $isChild<T>(Action<T> event) => event.name.startsWith($name);
 
   LocalState $mapState(Built<dynamic, dynamic> appState) =>
       $options.stateMapper(appState);

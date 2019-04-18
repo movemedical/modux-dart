@@ -427,10 +427,10 @@ class RouterService implements StoreService, RouterRegistry {
   }
 
   @override
-  void init() {}
+  Future init() async {}
 
   @override
-  void dispose() {
+  Future dispose() async {
     List.of(_waiters).forEach((w) => w.cancel());
   }
 

@@ -15,11 +15,11 @@ abstract class AbstractStoreService<Self>
   Type get keyType => Self;
 
   @override
-  void init() {}
+  Future init() async {}
 
   @override
   @mustCallSuper
-  void dispose() {
+  Future dispose() async {
     disposeSubscriptions();
   }
 }
