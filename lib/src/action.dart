@@ -16,6 +16,8 @@ abstract class ModuxValue<T> {
 
   T mapValue$(Store store);
 
+  T get value$;
+
   ActionDispatcher<T> get replace$;
 }
 
@@ -97,9 +99,9 @@ class ActionDispatcher<P> extends ActionName<P> {
   }
 
   StoreSubscription<P> listen([Function(P) handler]) =>
-      parent?.store?.store?.listen(this, handler);
+      store?.listen(this, handler);
 
-  StoreSubscription<P> subscribe() => parent.store.store.subscribe(this);
+  StoreSubscription<P> subscribe() => store?.subscribe(this);
 }
 
 ///
@@ -143,6 +145,9 @@ class FieldDispatcher<State> extends ActionDispatcher<State>
 
   @override
   String get name$ => name;
+
+  @override
+  State get value$ => mapValue$(store);
 
   @override
   State mapValue$(Store store) => stateMapper(store.state);
@@ -264,12 +269,12 @@ abstract class ModuxActions<
       _$actionsMap ??= BuiltMap<String, ActionDispatcher>.build(
           (b) => actions$.forEach((a) => b[a.simpleName] = a));
 
-  Store<State, StateBuilder, StoreActions> castStore<
-          State extends Built<State, StateBuilder>,
-          StateBuilder extends Builder<State, StateBuilder>,
-          StoreActions extends ModuxActions<State, StateBuilder,
-              StoreActions>>() =>
-      store$ as Store<State, StateBuilder, StoreActions>;
+//  Store<State, StateBuilder, StoreActions> castStore<
+//          State extends Built<State, StateBuilder>,
+//          StateBuilder extends Builder<State, StateBuilder>,
+//          StoreActions extends ModuxActions<State, StateBuilder,
+//              StoreActions>>() =>
+//      store$ as Store<State, StateBuilder, StoreActions>;
 
   void visitCommands$(void fn(ModuxActions owner, CommandDispatcher a)) {
     visitNested$((actions) {
@@ -325,7 +330,7 @@ abstract class ModuxActions<
 
   LocalStateBuilder get builder$ => initialBuilder$;
 
-  StoreSubject $listen<
+  StoreSubject listen$<
               State extends Built<State, StateBuilder>,
               StateBuilder extends Builder<State, StateBuilder>,
               Actions extends ModuxActions<State, StateBuilder, Actions>>(
@@ -393,6 +398,8 @@ abstract class StatefulActions<
     implements ModuxValue<LocalState> {
   @override
   ActionDispatcher<LocalState> get replace$;
+
+  LocalState get value$ => mapValue$(store$);
 
   @override
   LocalState mapValue$(Store store) => mapState$(store.state);
@@ -618,8 +625,7 @@ class StatelessActionsOptions<
 }
 
 ///
-abstract class StatelessActions<
-        Actions extends ModuxActions<Nothing, NothingBuilder, Actions>>
+abstract class StatelessActions<Actions extends StatelessActions<Actions>>
     extends ModuxActions<Nothing, NothingBuilder, Actions> {
   @override
   Nothing get initialState$ => Nothing();
