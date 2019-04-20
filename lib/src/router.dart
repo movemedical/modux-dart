@@ -215,8 +215,8 @@ class RouterServiceMutator<T> {
   }
 }
 
-class RouteWaiter extends LinkedListEntry<RouteWaiter> {
-  RouteWaiter(this.matcher, Duration timeout) {
+class _ActiveWaiter extends LinkedListEntry<_ActiveWaiter> {
+  _ActiveWaiter(this.matcher, Duration timeout) {
     if (timeout != null && timeout != Duration.zero) {
       _timer = Timer(timeout, () {
         if (completer.isCompleted) return;
@@ -263,7 +263,7 @@ class RouterService implements StoreService, RouterRegistry {
   RouterServiceMutator _mutator;
   final _stack = List<ActiveRoute>();
   final _byPlatform = LinkedHashMap<dynamic, ActiveRoute>();
-  final _waiters = LinkedList<RouteWaiter>();
+  final _activeWaiters = LinkedList<_ActiveWaiter>();
 
   final HasRouterActions actions;
   RouterRegistry _registry;
@@ -325,23 +325,16 @@ class RouterService implements StoreService, RouterRegistry {
   /// Immutable copy of the active stack.
   BuiltList<ActiveRoute> get stack => BuiltList<ActiveRoute>(_stack);
 
-  FutureOr<ActiveRoute> waitForActions(RouteActions actions,
-      [Duration timeout = Duration.zero]) async {
-    final descriptors = registry.routesByType[actions.actionsType$];
-    if (descriptors == null || descriptors.isEmpty)
-      throw StateError(
-          'Type ${actions.actionsType$} has no routes in the registry.');
-    return _doWait(RouteWaiter(
-        (a) => a?.descriptor?.toActions?.actionsType$ == actions.actionsType$,
-        timeout));
-  }
+  FutureOr<ActiveRoute> untilActive(RouteActions actions,
+          [Duration timeout = const Duration(seconds: 5)]) async =>
+      await untilActiveType(actions.actionsType$, timeout);
 
-  FutureOr<ActiveRoute> waitForType(Type type,
+  FutureOr<ActiveRoute> untilActiveType(Type type,
       [Duration timeout = const Duration(seconds: 5)]) async {
     final descriptors = registry.routesByType[type];
     if (descriptors == null || descriptors.isEmpty)
       throw StateError('Type $type has no routes in the registry.');
-    return await _doWait(RouteWaiter((a) {
+    return await _doWait(_ActiveWaiter((a) {
       if (a?.descriptor?.toActions?.actionsType$ == type ?? false) {
         return true;
       }
@@ -353,14 +346,43 @@ class RouterService implements StoreService, RouterRegistry {
     }, timeout));
   }
 
-  FutureOr<ActiveRoute> _doWait(RouteWaiter waiter) async {
-    _waiters.add(waiter);
+  FutureOr<ActiveRoute> _doWait(_ActiveWaiter waiter) async {
+    _activeWaiters.add(waiter);
     for (int i = 0; i < _stack.length; i++) {
       final r = _stack[i];
       if (r.future == null) continue;
       if (waiter._maybeComplete(r)) return r;
     }
     return await waiter.completer.future;
+  }
+
+  FutureOr<CommandResult> untilRemoved(RouteActions actions,
+      [Duration timeout = const Duration(seconds: 10)]) async {
+    final type = actions.actionsType$;
+    final descriptors = registry.routesByType[type];
+    if (descriptors == null || descriptors.isEmpty)
+      throw StateError('Type $type has no routes in the registry.');
+    return await _doWaitRemoved(
+        (route) => route?.descriptor?.toActions?.actionsType$ == type ?? false);
+  }
+
+  FutureOr<CommandResult> _doWaitRemoved(bool test(ActiveRoute route)) async {
+    final first = _stack.firstWhere(test);
+    if (first == null) {
+      return null;
+    }
+
+    final f = first.future;
+
+    if (f == null || f.isCompleted) {
+      return null;
+    }
+    try {
+      final result = await f;
+      return result;
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Find the active route based on RouteDispatcher name.
@@ -431,7 +453,7 @@ class RouterService implements StoreService, RouterRegistry {
 
   @override
   Future dispose() async {
-    List.of(_waiters).forEach((w) => w.cancel());
+    List.of(_activeWaiters).forEach((w) => w.cancel());
   }
 
   /// Attempts to restore Router UI state on startup.
@@ -1001,7 +1023,7 @@ class RouteFuture<
       try {
         descriptor.toActions?.activated$?.call();
       } finally {
-        service._waiters?.forEach((waiter) => waiter._maybeComplete(v));
+        service._activeWaiters?.forEach((waiter) => waiter._maybeComplete(v));
       }
     });
   }

@@ -14,11 +14,17 @@ part 'action.g.dart';
 abstract class ModuxValue<T> {
   String get name$;
 
+  Store get store$;
+
   T mapValue$(Store store);
 
   T get value$;
 
+  set value$(T value);
+
   ActionDispatcher<T> get replace$;
+
+  StoreSubscription<T> onReplace$([Function(T) handler]);
 }
 
 class ActionModel {
@@ -85,7 +91,7 @@ class ActionDispatcher<P> extends ActionName<P> {
 
   Store get store => parent.store.store;
 
-  void call([P payload]) => _dispatcher(new Action<P>(name, payload, this));
+  void call([P payload]) => _dispatcher(Action<P>(name, payload, this));
 
   bool isDescendentOf(ModuxActions actions) => name.startsWith(actions.name$);
 
@@ -150,10 +156,20 @@ class FieldDispatcher<State> extends ActionDispatcher<State>
   State get value$ => mapValue$(store);
 
   @override
+  set value$(State value) => this(value);
+
+  @override
   State mapValue$(Store store) => stateMapper(store.state);
 
   @override
   ActionDispatcher<State> get replace$ => this;
+
+  @override
+  StoreSubscription<State> onReplace$([Function(State) handler]) =>
+      store$?.listen(this, handler);
+
+  @override
+  Store get store$ => store;
 }
 
 /// [ModuxActions] is a container for all of your applications actions.
@@ -222,8 +238,8 @@ class FieldDispatcher<State> extends ActionDispatcher<State>
 ///       super();
 ///
 ///    @override
-///    void $reducer(ReducerBuilder reducer) {
-///      super.$reducer(reducer);
+///    void reducer$(ReducerBuilder reducer) {
+///      super.reducer$(reducer);
 ///    }
 ///  }
 /// ```
@@ -268,13 +284,6 @@ abstract class ModuxActions<
   BuiltMap<String, ActionDispatcher> get $actionsMap =>
       _$actionsMap ??= BuiltMap<String, ActionDispatcher>.build(
           (b) => actions$.forEach((a) => b[a.simpleName] = a));
-
-//  Store<State, StateBuilder, StoreActions> castStore<
-//          State extends Built<State, StateBuilder>,
-//          StateBuilder extends Builder<State, StateBuilder>,
-//          StoreActions extends ModuxActions<State, StateBuilder,
-//              StoreActions>>() =>
-//      store$ as Store<State, StateBuilder, StoreActions>;
 
   void visitCommands$(void fn(ModuxActions owner, CommandDispatcher a)) {
     visitNested$((actions) {
@@ -322,13 +331,17 @@ abstract class ModuxActions<
 
   bool get isSerializable$ => serializer$ != null;
 
-  FullType get $fullType => null;
-
   LocalState get state$ => mapState$(store$.state);
 
-//  LocalStateBuilder newBuilder$() => initialBuilder$;
-
   LocalStateBuilder get builder$ => initialBuilder$;
+
+  LocalStateBuilder toBuilder$() => state$.toBuilder();
+
+  LocalStateBuilder build$(void updates(LocalStateBuilder b)) {
+    final builder = builder$;
+    updates?.call(builder);
+    return builder;
+  }
 
   StoreSubject listen$<
               State extends Built<State, StateBuilder>,
@@ -399,15 +412,23 @@ abstract class StatefulActions<
   @override
   ActionDispatcher<LocalState> get replace$;
 
+  @override
   LocalState get value$ => mapValue$(store$);
+
+  @override
+  set value$(LocalState value) => reset$(value);
 
   @override
   LocalState mapValue$(Store store) => mapState$(store.state);
 
   @override
+  StoreSubscription<LocalState> onReplace$([Function(LocalState) handler]) =>
+      replace$.listen(handler);
+
+  @override
   bool get isStateful$ => true;
 
-  void $reset([LocalState state]) {
+  void reset$([LocalState state]) {
     replace$(state ?? initialState$);
   }
 
@@ -424,10 +445,10 @@ abstract class StatefulActions<
   @mustCallSuper
   void middleware$(MiddlewareBuilder middleware) {
     super.middleware$(middleware);
-    middleware.nest(this)..add(replace$, onReplace$);
+    middleware.nest(this)..add(replace$, didReplace$);
   }
 
-  void onReplace$(
+  void didReplace$(
       NestedMiddlewareApi<dynamic, dynamic, dynamic, LocalState,
               LocalStateBuilder, LocalActions>
           api,
@@ -442,7 +463,7 @@ abstract class StatefulActions<
     dynamic current = mapState$(store.state);
     if (current != null) {
       if (this is StatefulActions && state != null) {
-        $reset(state);
+        reset$(state);
       }
       return true;
     }
@@ -450,10 +471,10 @@ abstract class StatefulActions<
     var parent = mapParent$(store.actions);
     if (parent == null) {
       if (parent is StatefulActions) {
-        parent.$reset();
+        parent.reset$();
       }
       if (this is StatefulActions) {
-        $reset(state);
+        reset$(state);
       }
       return true;
     }
@@ -465,7 +486,7 @@ abstract class StatefulActions<
     parentState = parent.mapState$(store.state);
     if (parentState == null) return false;
 
-    $reset(state);
+    reset$(state);
     return mapState$(store.state) != null;
   }
 }
