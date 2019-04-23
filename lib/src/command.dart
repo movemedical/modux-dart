@@ -121,37 +121,56 @@ abstract class CommandDispatcher<Cmd, Result,
   void reducer$(ReducerBuilder reducer) {
     super.reducer$(reducer);
     reducer.nest(this)
-      ..add(cancel$, (state, builder, action) {
-        if (builder == null) return;
-        builder?.status = CommandStatus.canceling;
-      })
-      ..add(execute$, (state, builder, Action<Command<Cmd>> action) {
-        if (builder == null) return;
-        // Set request.
-        builder.command = action.payload.toBuilder();
-        // Set to 'calling'.
-        builder.status = CommandStatus.executing;
-      })
-      ..add(progress$, (state, builder, Action<CommandProgress> action) {
-        if (builder == null) return;
-        // Set progress.
-        builder.progress = action.payload?.toBuilder();
-      })
-      ..add(result$, (state, builder, Action<CommandResult<Result>> action) {
-        if (builder == null) return;
-        final req = builder.command;
-        if (req == null) return;
-        final payload = action.payload;
-        if (payload == null) {
-          return;
-        }
-        if (req.id != payload.id) {
-          return;
-        }
+      ..add(cancel$, reduceCancel)
+      ..add(execute$, reduceExecute)
+      ..add(progress$, reduceProgress)
+      ..add(result$, reduceResult);
+  }
 
-        builder.result = payload.toBuilder();
-        builder.status = CommandStatus.result;
-      });
+  void reduceCancel(CommandState<Cmd, Result> state,
+      CommandStateBuilder<Cmd, Result> builder, Action<String> action) {
+    if (builder == null) return;
+    builder.status = CommandStatus.idle;
+    builder.command = null;
+    builder.result = null;
+    builder.progress = null;
+  }
+
+  void reduceExecute(CommandState<Cmd, Result> state,
+      CommandStateBuilder<Cmd, Result> builder, Action<Command<Cmd>> action) {
+    if (builder == null) return;
+    // Set request.
+    builder.command = action.payload.toBuilder();
+    // Set to 'calling'.
+    builder.status = CommandStatus.executing;
+  }
+
+  void reduceResult(
+      CommandState<Cmd, Result> state,
+      CommandStateBuilder<Cmd, Result> builder,
+      Action<CommandResult<Result>> action) {
+    if (builder == null) return;
+    final req = builder.command;
+    if (req == null) return;
+    final payload = action.payload;
+    if (payload == null) {
+      return;
+    }
+    if (req.id != payload.id) {
+      return;
+    }
+
+    builder.result = payload.toBuilder();
+    builder.status = CommandStatus.result;
+  }
+
+  void reduceProgress(
+      CommandState<Cmd, Result> state,
+      CommandStateBuilder<Cmd, Result> builder,
+      Action<CommandProgress> action) {
+    if (builder == null) return;
+    // Set progress.
+    builder.progress = action.payload?.toBuilder();
   }
 
   StoreSubscription<Command<Cmd>> onExecute([Function(Command<Cmd>) handler]) =>
