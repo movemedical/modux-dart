@@ -206,6 +206,12 @@ class _$CommandResultSerializer implements StructuredSerializer<CommandResult> {
       serializers.serialize(object.timestamp,
           specifiedType: const FullType(DateTime)),
     ];
+    if (object.uid != null) {
+      result
+        ..add('uid')
+        ..add(serializers.serialize(object.uid,
+            specifiedType: const FullType(String)));
+    }
     if (object.message != null) {
       result
         ..add('message')
@@ -241,6 +247,10 @@ class _$CommandResultSerializer implements StructuredSerializer<CommandResult> {
       iterator.moveNext();
       final dynamic value = iterator.current;
       switch (key) {
+        case 'uid':
+          result.uid = serializers.deserialize(value,
+              specifiedType: const FullType(String)) as String;
+          break;
         case 'id':
           result.id = serializers.deserialize(value,
               specifiedType: const FullType(String)) as String;
@@ -658,6 +668,8 @@ class CommandProgressBuilder
 
 class _$CommandResult<RESP> extends CommandResult<RESP> {
   @override
+  final String uid;
+  @override
   final String id;
   @override
   final CommandResultCode code;
@@ -674,7 +686,8 @@ class _$CommandResult<RESP> extends CommandResult<RESP> {
       (new CommandResultBuilder<RESP>()..update(updates)).build();
 
   _$CommandResult._(
-      {this.id,
+      {this.uid,
+      this.id,
       this.code,
       this.message,
       this.started,
@@ -710,6 +723,7 @@ class _$CommandResult<RESP> extends CommandResult<RESP> {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is CommandResult &&
+        uid == other.uid &&
         id == other.id &&
         code == other.code &&
         message == other.message &&
@@ -722,7 +736,9 @@ class _$CommandResult<RESP> extends CommandResult<RESP> {
   int get hashCode {
     return $jf($jc(
         $jc(
-            $jc($jc($jc($jc(0, id.hashCode), code.hashCode), message.hashCode),
+            $jc(
+                $jc($jc($jc($jc(0, uid.hashCode), id.hashCode), code.hashCode),
+                    message.hashCode),
                 started.hashCode),
             timestamp.hashCode),
         value.hashCode));
@@ -731,6 +747,7 @@ class _$CommandResult<RESP> extends CommandResult<RESP> {
   @override
   String toString() {
     return (newBuiltValueToStringHelper('CommandResult')
+          ..add('uid', uid)
           ..add('id', id)
           ..add('code', code)
           ..add('message', message)
@@ -744,6 +761,10 @@ class _$CommandResult<RESP> extends CommandResult<RESP> {
 class CommandResultBuilder<RESP>
     implements Builder<CommandResult<RESP>, CommandResultBuilder<RESP>> {
   _$CommandResult<RESP> _$v;
+
+  String _uid;
+  String get uid => _$this._uid;
+  set uid(String uid) => _$this._uid = uid;
 
   String _id;
   String get id => _$this._id;
@@ -773,6 +794,7 @@ class CommandResultBuilder<RESP>
 
   CommandResultBuilder<RESP> get _$this {
     if (_$v != null) {
+      _uid = _$v.uid;
       _id = _$v.id;
       _code = _$v.code;
       _message = _$v.message;
@@ -801,6 +823,7 @@ class CommandResultBuilder<RESP>
   _$CommandResult<RESP> build() {
     final _$result = _$v ??
         new _$CommandResult<RESP>._(
+            uid: uid,
             id: id,
             code: code,
             message: message,

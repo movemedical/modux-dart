@@ -259,32 +259,6 @@ abstract class CommandDispatcher<Cmd, Result,
   }
 }
 
-//abstract class CommandPayload<D extends CommandDispatcher<dynamic, dynamic, D>,
-//        P>
-//    implements
-//        Built<CommandPayload<REQ, RESP, D, P>,
-//            CommandPayloadBuilder<REQ, RESP, D, P>> {
-//  P get payload;
-//
-//  D get dispatcher;
-//
-//  @nullable
-//  CommandFuture get future;
-//
-//  Type get requestType => REQ;
-//
-//  Type get responseType => RESP;
-//
-//  Type get dispatcherType => D;
-//
-//  CommandPayload._();
-//
-//  factory CommandPayload(P payload, D dispatcher) =>
-//      _$CommandPayload<REQ, RESP, D, P>((b) => b
-//        ..payload = payload
-//        ..dispatcher = dispatcher);
-//}
-
 @BuiltValue(wireName: 'modux/Command')
 abstract class Command<REQ>
     implements Built<Command<REQ>, CommandBuilder<REQ>> {
@@ -385,10 +359,21 @@ abstract class CommandProgress
   static const Duration INF = Duration(seconds: -1);
 }
 
+@immutable
+class CommandResultPayload<Req, Resp> {
+  CommandResultPayload(this.command, this.result);
+
+  final Command<Req> command;
+  final CommandResult<Resp> result;
+}
+
 @BuiltValue(wireName: 'modux/CommandResult')
 abstract class CommandResult<RESP>
     implements Built<CommandResult<RESP>, CommandResultBuilder<RESP>> {
   static Serializer<CommandResult> get serializer => _$commandResultSerializer;
+
+  @nullable
+  String get uid;
 
   String get id;
 
@@ -645,6 +630,7 @@ abstract class CommandFuture<REQ, RESP,
       {RESP response, String message = null}) {
     if (completer.isCompleted) return;
     completeResult((CommandResultBuilder<RESP>()
+          ..uid = command.uid
           ..id = command.id
           ..code = code
           ..started = started
