@@ -781,7 +781,7 @@ class StoreSubject<T> extends Subject<T> implements StoreSubscription<T> {
       {Duration timeout = Duration.zero}) {
     // ignore: close_sinks
     final controller = StreamController<T>.broadcast(
-      sync: true,
+      sync: false,
     );
 
     Stream<T> stream = controller.stream;
