@@ -22,6 +22,8 @@ abstract class ModuxValue<T> {
 
   set value$(T value);
 
+  void clear$();
+
   ActionDispatcher<T> get replace$;
 
   StoreSubscription<T> onReplace$([Function(T) handler]);
@@ -156,7 +158,14 @@ class FieldDispatcher<State> extends ActionDispatcher<State>
   State get value$ => mapValue$(store);
 
   @override
-  set value$(State value) => this(value);
+  set value$(State value) {
+    if (value != value$) this(value);
+  }
+
+  @override
+  void clear$() {
+    if (value$ != null) this(null);
+  }
 
   @override
   State mapValue$(Store store) => stateMapper(store.state);
@@ -416,7 +425,14 @@ abstract class StatefulActions<
   LocalState get value$ => mapValue$(store$);
 
   @override
-  set value$(LocalState value) => reset$(value);
+  set value$(LocalState value) {
+    if (value != value$) reset$(value);
+  }
+
+  @override
+  void clear$() {
+    if (value$ != null) reset$(null);
+  }
 
   @override
   LocalState mapValue$(Store store) => mapState$(store.state);
