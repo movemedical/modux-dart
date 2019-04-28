@@ -511,9 +511,8 @@ class DispatcherFutures<Req, Resp,
   }
 
   void register(CommandFuture<Req, Resp, Actions> future) {
-    if (future.command?.id != null)
-      futures.remove(future.command.id)?.replaced();
-    futures[future.command.id] = future;
+    if (future.id != null) futures.remove(future.id)?.replaced();
+    futures[future.id] = future;
   }
 
   void cancelAll() => futures.values.toList().forEach((f) => f.cancel());

@@ -1,23 +1,19 @@
 import 'dart:async';
-import 'dart:core';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:core';
 
-import 'package:meta/meta.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
-
-import 'package:rxdart/rxdart.dart';
 import 'package:logging/logging.dart';
+import 'package:rxdart/rxdart.dart';
 
-import 'form.dart';
 import 'action.dart';
 import 'command.dart';
+import 'form.dart';
 import 'middleware.dart';
 import 'store_change.dart';
 import 'typedefs.dart';
-import 'service.dart';
 
 ///
 abstract class StoreService {
@@ -149,7 +145,7 @@ class Store<
     final api = MiddlewareApi<State, StateBuilder, Actions>(this);
 
     final reducer = actions.createReducer$();
-    assert(reducer != null, '\$createReducer() returned null');
+    assert(reducer != null, 'createReducer\$() returned null');
 
     // setup the dispatch chain
     ActionHandler handler = (action) {
@@ -187,6 +183,7 @@ class Store<
 
     final middlewareList = List<Middleware<State, StateBuilder, Actions>>();
     middlewareList.add(_commandMiddleware);
+
     if (middleware != null) middlewareList.addAll(middleware);
 
     // Scope each function with the store's api
@@ -552,7 +549,9 @@ class Store<
       }
     }
 
-    final actionsName = index == 0 ? '' : name.substring(0, index);
+    var actionsName = prev.isEmpty
+        ? last.substring(0, index)
+        : '$prev.${last.substring(0, index)}';
     _nestedMap[actionsName]?.add(event);
 
     _actionMap[name]?.add(event);
