@@ -326,6 +326,21 @@ class Store<
           (SubStateChange<State, StateBuilder, SubState, dynamic> change) =>
               change.next);
 
+  /// Finds a ModuxActions instance based on it's globally unique name.
+  ModuxActions findActions(String name) {
+    if (name == null) return null;
+    if (name.isEmpty) return this.actions;
+    return actions.nestedByRelativeName$(name);
+  }
+
+  /// Finds a ModuxValue instance based on it's globally unique name.
+  ModuxValue findValue(String name) {
+    if (name == null) return null;
+    if (name.isEmpty)
+      return this.actions is ModuxValue ? this.actions as ModuxValue : null;
+    return actions.valueByRelativeName$(name);
+  }
+
   /// Waits for the next action from the specified ActionDispatcher to
   /// be dispatched.
   Future<P> actionFuture<P>(ActionDispatcher<P> action,
@@ -333,6 +348,10 @@ class Store<
           bool where(Action<P> action)}) async =>
       listen(action, null).toFuture(timeout);
 
+  /// Returns the active instance of DispatcherFutures which contains
+  /// all active futures for a particular instance of a CommandDispatcher.
+  /// CommandDispatcher does not impose any requirements on how many active
+  /// futures any particular instance may have.
   DispatcherFutures<REQ, RESP, D>
       futuresOf<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
               D dispatcher) =>
@@ -342,37 +361,42 @@ class Store<
   CommandFuture<REQ, RESP, D>
       executeCommand<REQ, RESP, D extends CommandDispatcher<REQ, RESP, D>>(
           D dispatcher, Command<REQ> command) {
+    // Create a new dispatcher specific CommandFuture.
     final future = dispatcher.newFuture(command);
 
+    // Get DispatcherFutures instance for CommandDispatcher instance.
     final name = dispatcher.name$;
     DispatcherFutures futures = _dispatcherFutures[name];
-
     if (futures == null) {
+      // Create a new DispatcherFutures and put in global map.
       futures = DispatcherFutures<REQ, RESP, D>(
           name, this, _dispatcherFutures, _futureMap, dispatcher);
       _dispatcherFutures[dispatcher.name$] = futures;
     }
 
+    // Find existing future.
     final existing = _futureMap[future.uid];
     futures.register(future);
-
     if (existing != null) {
       existing.cancel();
     }
 
+    // Add to global future map.
     _futureMap[future.uid] = future;
 
+    // Notify that command is executing.
     dispatcher.execute(command);
 
+    // Start the future.
     future.start();
-//    final state = dispatcher.$mapState(_state);
-//    if (state == null) return Future.error('Command is null');
-//    if (state.isCompleted) return Future.value(state.result);
 
+    // Return future.
     return future;
   }
 
-  /// Execute a Command.
+  /// Helping for executing a NestedBuiltCommandDispatcher.
+  /// This removes some of the ceremony around building the nested
+  /// command structure.
   CommandFuture<Cmd, Result, Actions>
       executeBuilt<
               Cmd extends Built<Cmd, CmdBuilder>,
@@ -557,12 +581,7 @@ class Store<
     _actionMap[name]?.add(event);
   }
 
-  ModuxActions nestedOfName(String name) {
-    if (name == null) return null;
-    if (name.isEmpty) return this.actions;
-    return actions.nestedByRelativeName$(name);
-  }
-
+  /// Dispatch a single Action.
   void dispatch<T>(Action<T> action) => _dispatcher?.call(action);
 
   ///

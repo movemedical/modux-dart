@@ -280,17 +280,36 @@ abstract class ModuxActions<
 
   Store get store$ => options$.store.store;
 
+  BuiltMap<String, ModuxValue> _valuesMap$;
+  BuiltMap<String, ModuxValue> get valuesMap$ =>
+      _valuesMap$ ??= buildValuesMap$();
+
+  BuiltMap<String, ModuxValue> buildValuesMap$() {
+    final builder = MapBuilder<String, ModuxValue>();
+    // Add any ModuxValue action dispatchers.
+    actions$.forEach((action) {
+      if (action is ModuxValue)
+        builder[action.simpleName] = action as ModuxValue;
+    });
+    // Add any nested ModuxActions values.
+    nested$.forEach((actions) {
+      if (actions is ModuxValue)
+        builder[actions.simpleName$] = actions as ModuxValue;
+    });
+    return builder.build();
+  }
+
   BuiltList<ModuxActions> get nested$ => _emptyNested;
-  BuiltMap<String, ModuxActions> _$nestedMap;
+  BuiltMap<String, ModuxActions> _nestedMap$;
 
   BuiltMap<String, ModuxActions> get nestedMap$ =>
-      _$nestedMap ??= BuiltMap<String, ModuxActions>.build(
+      _nestedMap$ ??= BuiltMap<String, ModuxActions>.build(
           (b) => nested$.forEach((n) => b[n.simpleName$] = n));
 
   BuiltList<ActionDispatcher> get actions$ => _emptyActions;
   BuiltMap<String, ActionDispatcher> _$actionsMap;
 
-  BuiltMap<String, ActionDispatcher> get $actionsMap =>
+  BuiltMap<String, ActionDispatcher> get actionsMap$ =>
       _$actionsMap ??= BuiltMap<String, ActionDispatcher>.build(
           (b) => actions$.forEach((a) => b[a.simpleName] = a));
 
@@ -305,6 +324,18 @@ abstract class ModuxActions<
     nested$?.forEach((actions) {
       actions.visitNested$(callback);
       callback(actions);
+    });
+  }
+
+  void visitValues$(Function(ModuxValue a) callback) {
+    actions$?.forEach((action) {
+      if (action is ModuxValue) {}
+    });
+    nested$?.forEach((actions) {
+      if (actions is ModuxValue) {
+        callback(actions as ModuxValue);
+      }
+      actions.visitValues$(callback);
     });
   }
 
@@ -330,6 +361,24 @@ abstract class ModuxActions<
     } else {
       return nestedMap$[name];
     }
+  }
+
+  ModuxValue valueByRelativeName$(String name) {
+    // Is the name valid?
+    if (name == null || name.isEmpty) return null;
+
+    // Is it further down the tree?
+    var nestedIndex = name.indexOf('.');
+    if (nestedIndex > -1)
+      return nestedMap$[name.substring(0, nestedIndex)]
+          ?.valueByRelativeName$(name.substring(nestedIndex + 1));
+
+    // Is it an Action?
+    var actionIndex = name.indexOf('-');
+    if (actionIndex > -1) return valuesMap$[name.substring(actionIndex + 1)];
+
+    // Maybe it's a nested actions value?
+    return valuesMap$[name];
   }
 
   LocalStateBuilder newBuilder$();
