@@ -198,8 +198,8 @@ class RouterServiceMutator<T> {
     service._didPush(route);
   }
 
-  void pop(dynamic route) {
-    service._didPop(route);
+  void pop(dynamic route, dynamic result) {
+    service._didPop(route, result);
   }
 
   void replace(dynamic oldRoute, dynamic newRoute) {
@@ -537,7 +537,7 @@ class RouterService implements StoreService, RouterRegistry {
     _syncState();
   }
 
-  void _didPop(dynamic platform) {
+  void _didPop(dynamic platform, dynamic result) {
     // Ensure it's removed from byPlatform map.
     _byPlatform.remove(platform);
 
@@ -551,7 +551,15 @@ class RouterService implements StoreService, RouterRegistry {
         final popped = _stack.removeLast();
 
         if (!(popped?.future?.isCompleted ?? true)) {
-          popped?.future?.complete(CommandResultCode.done);
+          try {
+            popped?.future?.tryComplete(result);
+          } catch (e) {
+            try {
+              popped?.future?.tryComplete(null);
+            } catch (e) {
+              // Ignore.
+            }
+          }
         }
       } finally {
         _syncState();
@@ -733,23 +741,24 @@ abstract class RouteActions<
     final active = router.activeOfName(name$);
     if (active == null) return false;
 
-    if (active.platformFuture != null) {
-      router._plugin?.pop(active, result);
-      return true;
-    }
-
     if (builder != null) {
       final b = newResultBuilder$();
       builder(b);
       result = b.build();
     }
 
+    active.future?._pending = result;
+
+    if (active.platformFuture != null) {
+      router._plugin?.pop(active, result);
+      return true;
+    }
+
     if (result == null) {
       result = newResultBuilder$().build();
     }
 
-    active.future.complete(CommandResultCode.done,
-        response: RouteResult<Result>((b) => b..value = result));
+    active.future.tryComplete(result);
 
     return true;
   }
@@ -1030,6 +1039,7 @@ class RouteFuture<
 
   final RouterService service;
   final RouteDescriptor descriptor;
+  Result _pending;
 
   // Ack completer that completes once PlatformPlugin confirms route
   // by either pushing or replacing. Popping, removing or any other time
@@ -1056,7 +1066,7 @@ class RouteFuture<
   bool tryComplete(Result result) {
     if (isCompleted) return false;
     complete(CommandResultCode.done,
-        response: RouteResult((b) => b..value = result));
+        response: RouteResult((b) => b..value = result ?? _pending));
     return true;
   }
 
@@ -1067,6 +1077,7 @@ class RouteFuture<
 
   @override
   void done(CommandResult<RouteResult> result) {
+    _pending = null;
     if (!_ack.isCompleted) _ack.complete();
     service?._done(this, result);
   }
