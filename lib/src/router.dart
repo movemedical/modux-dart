@@ -1063,6 +1063,8 @@ class RouteFuture<
 
   bool get isInflating => command?.payload?.inflating ?? false;
 
+  Future<Result> get result => completer.future.then((v) => v?.value?.value);
+
   bool tryComplete(Result result) {
     if (isCompleted) return false;
     complete(CommandResultCode.done,
