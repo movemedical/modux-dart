@@ -1,4 +1,5 @@
 import 'package:built_value/built_value.dart';
+import 'package:built_collection/built_collection.dart';
 
 import 'action.dart';
 import 'typedefs.dart';
@@ -20,6 +21,20 @@ class ReducerBuilder<State extends Built<State, StateBuilder>,
     _map[actionName.name] = (state, builder, action) {
       reducer(state, builder, action as Action<Payload>);
     };
+  }
+
+  void bind<T, I>(
+      FieldDispatcher<T> from, FieldDispatcher<I> to, I Function(T) map) {
+    add(from, (a, b, Action<T> action) {
+      to.replaceMapper?.call(b, map(action.payload));
+    });
+  }
+
+  void bindList<T, I>(FieldDispatcher<BuiltList<T>> from,
+      FieldDispatcher<BuiltList<I>> to, I Function(T) map) {
+    add(from, (a, b, Action<BuiltList<T>> action) {
+      to.value$ = BuiltList<I>(action.payload.map(map));
+    });
   }
 
   NestedReducerBuilder<State, StateBuilder, NestedState, NestedStateBuilder>

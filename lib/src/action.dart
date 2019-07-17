@@ -11,7 +11,7 @@ import 'typedefs.dart';
 
 part 'action.g.dart';
 
-abstract class ModuxValue<T> {
+abstract class ModuxValue<T> implements ActionName<T> {
   String get name$;
 
   Store get store$;
