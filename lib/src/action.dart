@@ -11,7 +11,7 @@ import 'typedefs.dart';
 
 part 'action.g.dart';
 
-abstract class ModuxValue<T> implements ActionName<T> {
+abstract class ModuxValue<T> {
   String get name$;
 
   Store get store$;
@@ -468,12 +468,6 @@ abstract class StatefulActions<
     extends ModuxActions<LocalState, LocalStateBuilder, LocalActions>
     implements ModuxValue<LocalState> {
   @override
-  String get simpleName => options$.simpleName;
-
-  @override
-  String get name => options$.name;
-
-  @override
   ActionDispatcher<LocalState> get replace$;
 
   @override
@@ -739,7 +733,15 @@ abstract class StatelessActions<Actions extends StatelessActions<Actions>>
 /// typed with a generic that is the same as the relative [ActionDispatcher]s
 /// payload generic. This allows you to declare reducer handlers with safety
 /// without having to instantiate your instance of [ModuxActions].
-@immutable
+//abstract class ActionName<T> {
+//  String get simpleName;
+//  String get name;
+//
+//  ActionName._();
+//
+//  factory ActionName(String simpleName, String name) = ActionNameImpl<T>;
+//}
+
 class ActionName<T> {
   final String simpleName;
   final String name;
