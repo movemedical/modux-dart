@@ -33,7 +33,7 @@ class ReducerBuilder<State extends Built<State, StateBuilder>,
   void bindList<T, I>(FieldDispatcher<BuiltList<T>> from,
       FieldDispatcher<BuiltList<I>> to, I Function(T) map) {
     add(from, (a, b, Action<BuiltList<T>> action) {
-      to.value$ = BuiltList<I>(action.payload.map(map));
+      to.replaceMapper?.call(b, BuiltList<I>(action.payload.map(map)));
     });
   }
 
