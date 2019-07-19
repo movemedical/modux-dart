@@ -468,6 +468,12 @@ abstract class StatefulActions<
     extends ModuxActions<LocalState, LocalStateBuilder, LocalActions>
     implements ModuxValue<LocalState> {
   @override
+  String get simpleName => options$.simpleName;
+
+  @override
+  String get name => options$.name;
+
+  @override
   ActionDispatcher<LocalState> get replace$;
 
   @override
